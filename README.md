@@ -181,3 +181,44 @@ To learn more about the technologies used:
 ## License
 
 This project is private.
+## EduTrack configuration and checks
+
+Copy `.env.example` to `.env.local` and configure your Supabase URL, public anon key,
+server service role key, and a private `SESSION_SECRET` of at least 32 characters.
+Set `NEXT_PUBLIC_APP_URL` to the deployed site URL. Service role keys must never be
+committed or exposed through `NEXT_PUBLIC_` variables. Rotate the service role key
+previously committed to this repository in Supabase before deploying this patch.
+Existing users must sign in again to obtain the new HTTP-only session cookie.
+
+Before deployment, apply `database/attendance-unique.sql` in your database. If it
+fails because duplicate register entries exist, reconcile those records first;
+the migration deliberately does not delete school data. Attendance saves now use
+an atomic upsert and retain offline records when synchronization fails.
+
+The repository does not contain the database schema or RLS policies. Verify them
+in a separate test project before production use. Most dashboard data operations
+still use the public Supabase client; the custom application session is **not** a
+Supabase Auth identity. The database must restrict anonymous access to school data
+and especially the `users` table/password hashes. Complete authorization for these
+operations requires a Supabase Auth/RLS migration or authenticated server APIs;
+server-side user-management checks alone do not secure direct database access.
+
+Run `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, and `npm audit`.
+Regression tests use synthetic fixtures and do not contact a school database.
+The remaining audit advisory affects `braces` through Next.js's lint tooling;
+there is no compatible patched release in the registry used for this check.
+Do not apply the suggested downgrade to Next.js 14 lint configuration.
+
+The API regression suite is opt-in: run `EDUTRACK_TEST_URL=http://localhost:3000 npm test`
+against an app configured with `tests/support/database-fixture.ts`. Start that
+fixture with `npx tsx -e "import { startDatabaseFixture } from './tests/support/database-fixture'; startDatabaseFixture(54321)"`.
+For this local test app, set `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321`,
+use synthetic nonempty anon/service keys, and generate a separate session secret.
+The fixture login is `fixture-admin` / `fixture-password`. Never configure this
+fixture for a deployed app. It intentionally implements only the HTTP contracts
+needed for these tests and does not enforce Supabase database permissions.
+
+Timetable AI parsing connects directly to OpenAI using the optional server-only
+`OPENAI_API_KEY`. Without it, the app remains usable and AI parsing returns a
+configuration error. Social preview images and the site icon are generated locally
+with EduTrack branding.

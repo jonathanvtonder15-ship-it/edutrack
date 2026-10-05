@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { filterRecipients } from '@/lib/notifications'
@@ -19,16 +21,14 @@ export default function AnnouncementsPage(){
   const [deleteOpen,setDeleteOpen]=useState<string|null>(null)
   const [deleting,setDeleting]=useState(false)
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'admin-teacher'
-
-  useEffect(()=>{ if(user) load() },[user])
-
-  async function load(){
+  const load = useCallback(async () => {
     if(!user) return
     const { data } = await supabase.from('messages').select('*,sender:users!messages_sender_id_fkey(display_name)').eq('school_id',user.school_id).eq('is_announcement',true).order('created_at',{ascending:false}).limit(100)
     setAnnouncements((data||[]).map((m:Record<string,unknown>)=>({id:m.id as string,subject:m.subject as string,body:m.body as string,created_at:m.created_at as string,sender_name:(m.sender as{display_name:string})?.display_name||''})))
     setLoading(false)
-  }
+  }, [user])
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'admin-teacher'
 
   async function sendAnnouncement(){
     if(!user||!form.subject||!form.body) return
@@ -52,6 +52,8 @@ export default function AnnouncementsPage(){
     setDeleting(false)
     setDeleteOpen(null)
   }
+
+  useLoadEffect(load)
 
   if(loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
 
@@ -88,8 +90,4 @@ export default function AnnouncementsPage(){
     </div>
   )
 }
-
-
-
-
 

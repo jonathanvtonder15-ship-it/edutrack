@@ -1,19 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createOpenAI } from '@ai-sdk/openai'
+import { requireSession } from '@/lib/session'
 import { generateText } from 'ai'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
-const openai = createOpenAI({
-  baseURL: `${process.env.CODEWORDS_RUNTIME_URI}/run/openai/v1`,
-  apiKey: process.env.CODEWORDS_API_KEY!,
-})
-
 type RefItem = { id: string; name: string; grade?: number }
 
 // Extract the JSON object from the model's response, tolerating prose/fences around it.
-function extractJson(text: string): any {
+function extractJson(text: string): unknown {
   let cleaned = text.trim()
   cleaned = cleaned.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim()
   try {
@@ -34,7 +30,9 @@ function extractJson(text: string): any {
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json()
+    const session = await requireSession(req, true)
+    if (session.response) return session.response
+    const body = await req.json().catch(() => null)
     const text = String(body?.text || '')
     const classes: RefItem[] = Array.isArray(body?.classes) ? body.classes : []
     const subjects: RefItem[] = Array.isArray(body?.subjects) ? body.subjects : []
@@ -50,6 +48,8 @@ export async function POST(req: NextRequest) {
     if (cleanText.length < 20) {
       return NextResponse.json({ error: 'No readable text found in this PDF. It is likely a scanned image — please export a text-based PDF from Excel or Word instead.' }, { status: 422 })
     }
+
+    if (!process.env.OPENAI_API_KEY) return NextResponse.json({ error: 'Timetable AI is not configured' }, { status: 503 })
 
     const prompt = `You are a school timetable parser. I have extracted the raw text of a school timetable PDF and need you to convert it into structured timetable entries.
 
@@ -91,7 +91,8 @@ Return ONLY a valid JSON object (no markdown fences, no commentary) with this ex
   ]
 }`
 
-    let parsed: any
+    const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY })
+    let parsed: unknown
     try {
       const { text: resultText } = await generateText({
         model: openai('gpt-4.1-mini'),
@@ -104,7 +105,7 @@ Return ONLY a valid JSON object (no markdown fences, no commentary) with this ex
       return NextResponse.json({ error: 'The AI could not process this timetable. Please try again, or upload a cleaner text-based PDF.' }, { status: 502 })
     }
 
-    if (!parsed || !Array.isArray(parsed.entries)) {
+    if (!parsed || typeof parsed !== 'object' || !('entries' in parsed) || !Array.isArray(parsed.entries)) {
       return NextResponse.json({ error: 'The AI did not return any timetable entries. The PDF layout may be too unusual — try a simpler grid-based export.' }, { status: 422 })
     }
 

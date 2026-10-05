@@ -1,22 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { requireSession } from '@/lib/session'
 import bcrypt from 'bcryptjs'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mkfixnivoyqghvmrsloj.supabase.co'
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rZml4bml2b3lxZ2h2bXJzbG9qIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjU2MjExNywiZXhwIjoyMDkyMTM4MTE3fQ.wZVOtCUdzqDxCWSOhAELjuZDQD1PdPRRREFtjAjQ5QE'
 
 const VALID_ROLES = ['admin', 'teacher', 'smt', 'admin-teacher', 'monitor-guardian']
 
 export async function POST(req: NextRequest) {
   try {
-    const { user_id, username, password, display_name, role, roles, requesting_user_role } = await req.json()
-    if (requesting_user_role !== 'admin' && requesting_user_role !== 'admin-teacher') return NextResponse.json({ error: 'Only admins can edit users' }, { status: 403 })
-    if (!user_id || !display_name) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    const session = await requireSession(req, true)
+    if (session.response) return session.response
+    const { user: actor, supabase } = session
+    const { user_id, username, password, display_name, role, roles } = await req.json().catch(() => null) || {}
+    if (typeof user_id !== 'string' || !user_id || typeof display_name !== 'string' || !display_name.trim() || (username !== undefined && typeof username !== 'string') || (password !== undefined && typeof password !== 'string')) return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     if (roles && (!Array.isArray(roles) || roles.some((r: string) => !VALID_ROLES.includes(r)))) return NextResponse.json({ error: 'Invalid roles' }, { status: 400 })
     if (role && !VALID_ROLES.includes(role)) return NextResponse.json({ error: 'Invalid role' }, { status: 400 })
 
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
-
+    if (actor.id === user_id && (role || (Array.isArray(roles) && roles.length))) return NextResponse.json({ error: 'You cannot change your own roles' }, { status: 400 })
     const updates: Record<string, unknown> = { display_name }
     if (role) updates.role = role
     if (Array.isArray(roles) && roles.length > 0) updates.roles = roles
@@ -32,7 +30,8 @@ export async function POST(req: NextRequest) {
       updates.password_hash = await bcrypt.hash(password, 10)
     }
 
-    const { data: user, error } = await supabase.from('users').update(updates).eq('id', user_id).select().single()
+    const { data: user, error } = await supabase.from('users').update(updates).eq('id', user_id).eq('school_id', actor.school_id).select().single()
+    if (error?.code === 'PGRST116') return NextResponse.json({ error: 'User not found' }, { status: 404 })
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     return NextResponse.json({ user: { id: user.id, username: user.username, display_name: user.display_name, role: user.role, roles: user.roles } })

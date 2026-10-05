@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mkfixnivoyqghvmrsloj.supabase.co'
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rZml4bml2b3lxZ2h2bXJzbG9qIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjU2MjExNywiZXhwIjoyMDkyMTM4MTE3fQ.wZVOtCUdzqDxCWSOhAELjuZDQD1PdPRRREFtjAjQ5QE'
+import { requireSession } from '@/lib/session'
 
 export async function POST(req: NextRequest) {
   try {
-    const { user_id, requesting_user_role, requesting_user_id } = await req.json()
-    if (requesting_user_role !== 'admin' && requesting_user_role !== 'admin-teacher') return NextResponse.json({ error: 'Only admins can delete users' }, { status: 403 })
+    const session = await requireSession(req, true)
+    if (session.response) return session.response
+    const { user: actor, supabase } = session
+    const { user_id } = await req.json().catch(() => null) || {}
     if (!user_id) return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
-    if (requesting_user_id && requesting_user_id === user_id) return NextResponse.json({ error: 'You cannot delete your own account' }, { status: 400 })
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
-    const { error } = await supabase.from('users').delete().eq('id', user_id)
+    if (actor.id === user_id) return NextResponse.json({ error: 'You cannot delete your own account' }, { status: 400 })
+    const { data: deleted, error } = await supabase.from('users').delete().eq('id', user_id).eq('school_id', actor.school_id).select('id')
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (!deleted?.length) return NextResponse.json({ error: 'User not found' }, { status: 404 })
     return NextResponse.json({ success: true })
   } catch (err) {
     console.error('Delete user error:', err)

@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -37,20 +39,20 @@ export default function UsersPage(){
   const [deleteOpen,setDeleteOpen]=useState<{id:string;name:string}|null>(null)
   const [deleting,setDeleting]=useState(false)
 
-  useEffect(()=>{if(user)load()},[user])
+  const load = useCallback(async () => {if(!user)return;const{data}=await supabase.from('users').select('id,username,display_name,role,roles').eq('school_id',user.school_id).order('display_name');if(data)setUsers(data.map((u:Record<string,unknown>)=>({id:u.id as string,username:u.username as string,display_name:u.display_name as string,role:(u.role as string)||'teacher',roles:(u.roles as string[])||[]})));setLoading(false)}, [user])
 
   const isAdmin = user?.role === 'admin' || user?.role === 'admin-teacher'
   const editingSelf = !!editUser && !!user && editUser.id === user.id
 
   function openEdit(u:{id:string;username:string;display_name:string;role:string;roles?:string[]}){const rs=u.roles&&u.roles.length?u.roles:[u.role];setEditUser({id:u.id,display_name:u.display_name,role:u.role,roles:rs,username:u.username});setEditForm({display_name:u.display_name,role:u.role,roles:rs,username:u.username,password:''});setEditError('');setEditOk('')}
 
-  async function load(){if(!user)return;const{data}=await supabase.from('users').select('id,username,display_name,role,roles').eq('school_id',user.school_id).order('display_name');if(data)setUsers(data.map((u:Record<string,unknown>)=>({id:u.id as string,username:u.username as string,display_name:u.display_name as string,role:(u.role as string)||'teacher',roles:(u.roles as string[])||[]})));setLoading(false)}
-
   async function createUser(){if(!user)return;setCreating(true);setError('');try{const res=await fetch('/api/auth/create-user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:form.username,password:form.password,display_name:form.display_name,role:form.role,roles:form.roles,school_id:user.school_id,requesting_user_role:user.role})});const data=await res.json();if(!res.ok)throw new Error(data.error||'Failed');setUsers([...users,data.user]);setForm({username:'',password:'',display_name:'',role:'teacher',roles:['teacher']});setOpen(false)}catch(err:unknown){setError(err instanceof Error?err.message:'Failed')}finally{setCreating(false)}}
 
   async function saveUserEdit(){if(!editUser||!editForm.display_name||!user)return;setSavingEdit(true);setEditError('');setEditOk('');try{const isSelf=editUser.id===user.id;const res=await fetch('/api/auth/update-user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:editUser.id,username:editForm.username,password:editForm.password,display_name:editForm.display_name,role:isSelf?'':(editForm.roles[0]||editForm.role),roles:isSelf?[]:editForm.roles,requesting_user_role:user.role})});const data=await res.json();if(!res.ok)throw new Error(data.error||'Failed');setUsers(users.map(u=>u.id===editUser.id?{...u,display_name:data.user.display_name,role:data.user.role,roles:data.user.roles||[],username:data.user.username}:u));if(isSelf){setUser({...user,display_name:data.user.display_name,username:data.user.username});setEditOk('Saved. Your details have been updated.')}else{setEditUser(null)}setSavingEdit(false)}catch(err:unknown){setEditError(err instanceof Error?err.message:'Failed');setSavingEdit(false)}}
 
   async function deleteUser(){if(!user||!deleteOpen)return;setDeleting(true);try{const res=await fetch('/api/auth/delete-user',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:deleteOpen.id,requesting_user_role:user.role,requesting_user_id:user.id})});const data=await res.json();if(!res.ok)throw new Error(data.error||'Failed');setUsers(users.filter(u=>u.id!==deleteOpen.id));setDeleteOpen(null)}catch(err:unknown){setEditError(err instanceof Error?err.message:'Failed')}finally{setDeleting(false)}}
+
+  useLoadEffect(load)
 
   if(!user||(user.role!=='admin'&&user.role!=='smt'&&user.role!=='admin-teacher'))return<div className="p-8 text-center text-slate-500">Admin/SMT access required</div>
   if(loading)return<div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>

@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
@@ -19,7 +21,7 @@ export default function StudentProfilePage() {
   // Zustand persist reads localStorage ASYNC. On first render user is null.
   // mounted becomes true only after useEffect fires, guaranteeing hydration.
   const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+
   const isAdmin = mounted && (user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'admin-teacher')
   const isSmt   = mounted && user?.role?.toLowerCase() === 'smt'
   const isGuardian = mounted && (useAppStore.getState().hasRole('monitor-guardian') || user?.role === 'admin' || user?.role === 'admin-teacher' || user?.role === 'smt')
@@ -46,9 +48,7 @@ export default function StudentProfilePage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => { if (user && studentId) load() }, [user, studentId])
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return
     const [sR, csR, cR, dR, mR] = await Promise.all([
       supabase.from('students').select('*').eq('id', studentId).single(),
@@ -80,7 +80,7 @@ export default function StudentProfilePage() {
       if (al) setAllocs(al.map((a: Record<string, unknown>) => ({ subject_name: (a.subjects as { name: string })?.name || 'General', teacher_name: (a.users as { display_name: string })?.display_name || '-', class_name: (a.classes as { name: string })?.name || '' })))
     }
     setLoading(false)
-  }
+  }, [user, studentId])
 
   async function saveProfile() {
     if (!student) return
@@ -136,6 +136,9 @@ export default function StudentProfilePage() {
   const avail = ac.filter((c) => !sc.some((s) => s.id === c.id))
   const pts = demerits.reduce((s, d) => s + d.points, 0)
   const mpts = merits.reduce((s, d) => s + d.points, 0)
+
+  useEffect(() => { setMounted(true) }, [])
+  useLoadEffect(load)
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
   if (!student) return <div className="text-center py-12 text-slate-500">Student not found</div>
@@ -360,31 +363,4 @@ export default function StudentProfilePage() {
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

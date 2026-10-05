@@ -40,5 +40,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# build-time badge injection
-app/layout.tsx.backup
+
+!.env.example

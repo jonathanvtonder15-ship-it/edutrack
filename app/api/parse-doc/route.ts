@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
     } catch {
       return NextResponse.json({ error: 'Expected multipart/form-data with a file field' }, { status: 400 })
     }
-    if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
+    if (!(file instanceof File)) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
 
     const text = await file.text()
     const lines = text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 0)
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const rows = lines.map((line: string) => {
       if (delimiter === '  ') return line.split(/\s{2,}/).map((cell: string) => cell.trim())
-      return line.split(delimiter).map((cell: string) => cell.trim()).filter((cell: string) => cell)
+      return line.split(delimiter).map((cell: string) => cell.trim())
     }).filter((row: string[]) => row.length > 1)
 
     if (rows.length < 2) {

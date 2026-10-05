@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { filterRecipients } from '@/lib/notifications'
@@ -45,9 +47,7 @@ export default function MeritsPage() {
   const [deleteOpen, setDeleteOpen] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => { if (user) load() }, [user])
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return
     const tKey = `merit_types_${user.school_id}`
     const sKey = `students_ref_${user.school_id}`
@@ -66,7 +66,7 @@ export default function MeritsPage() {
     if (sR.data) { setAllStudents(sR.data); cacheSet(sKey, sR.data, 300000) }
     if (cR.data) { setClasses(cR.data); cacheSet(cKey, cR.data, 300000) }
     setLoading(false)
-  }
+  }, [user])
 
   async function loadClassStudents(classId: string) {
     setSelectedClass(classId)
@@ -197,6 +197,8 @@ export default function MeritsPage() {
   const fd = merits.filter(d => `${d.student_name} ${d.type_name}`.toLowerCase().includes(search.toLowerCase()) && (!dateFrom || d.date >= dateFrom) && (!dateTo || d.date <= dateTo) && (!filterTeacher || d.given_by_name === filterTeacher))
   const teacherNames = [...new Set(merits.map(d => d.given_by_name).filter(Boolean))].sort((a, b) => a.localeCompare(b))
   const isAdmin = user?.role === 'admin' || user?.role === 'smt' || user?.role === 'admin-teacher'
+
+  useLoadEffect(load)
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
 
@@ -399,52 +401,4 @@ export default function MeritsPage() {
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,10 +37,12 @@ export default function ClassesPage(){
   const [regClassFilter,setRegClassFilter]=useState('')
   const [copySourceClass,setCopySourceClass]=useState('')
   const [copyingClass,setCopyingClass]=useState(false)
+
+  const load = useCallback(async () => {if(!user)return;const[cR,sR,subR,tR]=await Promise.all([supabase.from('classes').select('id,name,grade').eq('school_id',user.school_id).order('grade').order('name'),supabase.from('students').select('id,name,surname,student_number,grade,register_class').eq('school_id',user.school_id).order('surname'),supabase.from('subjects').select('id,name,grade').eq('school_id',user.school_id).order('name'),supabase.from('users').select('id,display_name').eq('school_id',user.school_id).in('role',['teacher','smt','admin-teacher'])]);const allCs=[];let from=0;const size=1000;while(true){const{data}=await supabase.from('class_students').select('class_id').order('id').range(from,from+size-1);if(!data||data.length===0)break;allCs.push(...data);if(data.length<size)break;from+=size}const cm=new Map<string,number>();allCs.forEach((cs:{class_id:string})=>cm.set(cs.class_id,(cm.get(cs.class_id)||0)+1));setClasses((cR.data||[]).map((c:{id:string;name:string;grade:number})=>({...c,student_count:cm.get(c.id)||0})));if(sR.data)setAllStudents(sR.data);if(subR.data)setSubjects(subR.data);if(tR.data)setTeachers(tR.data);setLoading(false)}, [user])
+
   // Distinct register classes from students
   const registerClasses=[...new Set(allStudents.map(s=>(s as SI & {register_class?:string}).register_class).filter(Boolean))].sort() as string[]
-  useEffect(()=>{if(user)load()},[user])
-  async function load(){if(!user)return;const[cR,sR,subR,tR]=await Promise.all([supabase.from('classes').select('id,name,grade').eq('school_id',user.school_id).order('grade').order('name'),supabase.from('students').select('id,name,surname,student_number,grade,register_class').eq('school_id',user.school_id).order('surname'),supabase.from('subjects').select('id,name,grade').eq('school_id',user.school_id).order('name'),supabase.from('users').select('id,display_name').eq('school_id',user.school_id).in('role',['teacher','smt','admin-teacher'])]);const allCs=[];let from=0;const size=1000;while(true){const{data}=await supabase.from('class_students').select('class_id').order('id').range(from,from+size-1);if(!data||data.length===0)break;allCs.push(...data);if(data.length<size)break;from+=size}const cm=new Map<string,number>();allCs.forEach((cs:{class_id:string})=>cm.set(cs.class_id,(cm.get(cs.class_id)||0)+1));setClasses((cR.data||[]).map((c:{id:string;name:string;grade:number})=>({...c,student_count:cm.get(c.id)||0})));if(sR.data)setAllStudents(sR.data);if(subR.data)setSubjects(subR.data);if(tR.data)setTeachers(tR.data);setLoading(false)}
+
   async function createClass(){if(!newClass.name||!newClass.grade||!user)return;const{data}=await supabase.from('classes').insert({name:newClass.name,grade:parseInt(newClass.grade),school_id:user.school_id}).select().single();if(data&&newClass.teacher_id)await supabase.from('allocations').insert({user_id:newClass.teacher_id,class_id:data.id,subject_id:newClass.subject_id||null});if(data){await load();setNewClass({name:'',grade:'',subject_id:'',teacher_id:''});setCreateOpen(false)}}
   async function deleteClass(id:string){await supabase.from('class_students').delete().eq('class_id',id);await supabase.from('classes').delete().eq('id',id);if(selectedClass?.id===id){setSelectedClass(null);setClassStudents([])};await load()}
   async function selectClass(cls:CI){setSelectedClass(cls);setEditForm({name:cls.name,grade:cls.grade.toString()});setEditingClass(false);setLoadingStudents(true);sessionStorage.setItem('edutrack_last_class',cls.id);const{data}=await supabase.from('class_students').select('student_id,students(id,name,surname,student_number,grade)').eq('class_id',cls.id);setClassStudents((data||[]).map((cs:Record<string,unknown>)=>cs.students as SI).filter(Boolean).sort((a,b)=>a.surname.localeCompare(b.surname)));const{data:al}=await supabase.from('allocations').select('id,subject_id,subjects(name),users!allocations_user_id_fkey(display_name)').eq('class_id',cls.id);setClassAllocs((al||[]).map((a:Record<string,unknown>)=>({id:a.id as string,subject_name:(a.subjects as{name:string})?.name||'General',teacher_name:(a.users as{display_name:string})?.display_name||'-'})));setLoadingStudents(false)}
@@ -60,6 +64,9 @@ export default function ClassesPage(){
   const csIds=new Set(classStudents.map(s=>s.id))
   const avail=allStudents.filter(s=>!csIds.has(s.id)&&`${s.name} ${s.surname}`.toLowerCase().includes(studentSearch.toLowerCase()))
   const gradeGroups=[...new Set(classes.map(c=>c.grade))].sort((a,b)=>a-b)
+
+  useLoadEffect(load)
+
   if(loading)return<div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
   return(<div className="flex flex-col lg:flex-row gap-4 lg:gap-6 lg:h-[calc(100vh-8rem)]">
     {/* Mobile class selector */}
@@ -80,14 +87,4 @@ export default function ClassesPage(){
     <Dialog open={addAllocOpen} onOpenChange={setAddAllocOpen}><DialogContent><DialogHeader><DialogTitle>Link Subject + Teacher</DialogTitle></DialogHeader><div className="space-y-3 pt-2"><select value={allocForm.subject_id} onChange={e=>setAllocForm({...allocForm,subject_id:e.target.value})} className="w-full h-10 px-3 rounded-md border text-sm bg-white"><option value="">Subject...</option>{subjects.filter(s=>!selectedClass||s.grade===selectedClass.grade).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><select value={allocForm.teacher_id} onChange={e=>setAllocForm({...allocForm,teacher_id:e.target.value})} className="w-full h-10 px-3 rounded-md border text-sm bg-white"><option value="">Teacher...</option>{teachers.map(t=><option key={t.id} value={t.id}>{t.display_name}</option>)}</select><Button onClick={addAlloc} disabled={!allocForm.teacher_id} className="w-full" style={{background:'#2563EB'}}>Link</Button></div></DialogContent></Dialog>
   </div>)
 }
-
-
-
-
-
-
-
-
-
-
 

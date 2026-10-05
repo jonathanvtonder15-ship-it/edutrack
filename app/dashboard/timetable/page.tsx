@@ -1,8 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Loader2, Plus, X, FileUp, Sparkles, CheckCircle2 } from 'lucide-react'
@@ -39,9 +41,7 @@ export default function TimetablePage() {
   // Color map: teacher_id → colour
   const [colorMap, setColorMap] = useState<Record<string,string>>({})
 
-  useEffect(() => { if (user) load() }, [user])
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return
     const [sR, eR, cR, subR, tR, aR] = await Promise.all([
       supabase.from('schools').select('timetable_type,periods_per_day').eq('id', user.school_id).single(),
@@ -67,7 +67,7 @@ export default function TimetablePage() {
       subject_name: (a.subjects as {name:string})?.name || '', teacher_name: (a.users as {display_name:string})?.display_name || '',
     })))
     setLoading(false)
-  }
+  }, [user])
 
   function onClassSelect(classId: string) {
     const ca = allocs.filter(a => a.class_id === classId)
@@ -141,7 +141,7 @@ export default function TimetablePage() {
           periods: school.periods_per_day,
         }),
       })
-      let data: any = {}
+      let data: { error?: string; entries?: typeof parsedEntries } = {}
       try {
         data = await res.json()
       } catch {
@@ -187,6 +187,8 @@ export default function TimetablePage() {
     }
     setApplying(false)
   }
+
+  useLoadEffect(load)
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
   if (!school) return null
@@ -377,17 +379,4 @@ export default function TimetablePage() {
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
 

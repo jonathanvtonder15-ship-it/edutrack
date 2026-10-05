@@ -33,8 +33,11 @@ export const useAppStore = create<AppState>()(
       user: null,
       loginTime: null,
       keepSignedIn: false,
-      setUser: (user, keepSignedIn = false) => set({ user, loginTime: user ? Date.now() : null, keepSignedIn }),
-      logout: () => set({ user: null, loginTime: null, keepSignedIn: false }),
+      setUser: (user, keepSignedIn = get().keepSignedIn) => set({ user, loginTime: user ? Date.now() : null, keepSignedIn }),
+      logout: () => {
+        void fetch('/api/auth/logout', { method: 'POST' }).catch(() => { /* Local session is still cleared when offline. */ })
+        set({ user: null, loginTime: null, keepSignedIn: false })
+      },
       isSessionValid: () => {
         const { loginTime, keepSignedIn } = get()
         if (!loginTime) return false

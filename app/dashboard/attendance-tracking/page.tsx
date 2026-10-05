@@ -1,11 +1,11 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Loader2, Users, TrendingUp, TrendingDown, CalendarDays, CheckCircle2, XCircle, Clock, Activity } from 'lucide-react'
+import { Loader2, TrendingUp, TrendingDown, CheckCircle2, XCircle, Clock, Activity } from 'lucide-react'
 
 interface ClassAvg { class_id: string; class_name: string; grade: number; present: number; absent: number; late: number; sport: number; total: number; rate: number }
 
@@ -27,16 +27,13 @@ export default function AttendanceTrackingPage() {
   const [dailyTrend, setDailyTrend] = useState<Array<{ date: string; present: number; absent: number; late: number; sport: number; total: number; rate: number }>>([])
   const [totals, setTotals] = useState({ present: 0, absent: 0, late: 0, sport: 0, total: 0 })
 
-  useEffect(() => { if (user) loadClasses() }, [user])
-  useEffect(() => { if (user) loadData() }, [user, filterClass, dateFrom, dateTo])
-
-  async function loadClasses() {
+  const loadClasses = useCallback(async () => {
     if (!user) return
     const { data } = await supabase.from('classes').select('id,name,grade').eq('school_id', user.school_id).order('grade').order('name')
     setClasses(data || [])
-  }
+  }, [user])
 
-  async function loadData() {
+  const loadData = useCallback(async () => {
     if (!user) return
     setLoading(true)
     let q = supabase.from('attendance').select('date,period,status,class_id,classes(name,grade)').eq('school_id', user.school_id).gte('date', dateFrom).lte('date', dateTo)
@@ -87,7 +84,7 @@ export default function AttendanceTrackingPage() {
     })
     setTotals(t)
     setLoading(false)
-  }
+  }, [user, dateFrom, dateTo, filterClass])
 
   function preset(days: number) {
     const to = new Date()
@@ -102,6 +99,9 @@ export default function AttendanceTrackingPage() {
   // Bar chart values for daily trend (rate %)
   const maxRate = 100
   const showTrend = dailyTrend.length > 0
+
+  useLoadEffect(loadClasses)
+  useLoadEffect(loadData)
 
   return (
     <div className="space-y-6">

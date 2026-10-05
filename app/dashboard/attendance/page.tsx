@@ -1,6 +1,9 @@
 'use client'
-import { useEffect, useState, useCallback, useRef } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
+import { saveAttendance, type AttendanceRecord } from '@/lib/attendance'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -20,6 +23,7 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [isOnline, setIsOnline] = useState(true)
   const [pendingSync, setPendingSync] = useState(0)
   const [focusIdx, setFocusIdx] = useState(0)
@@ -30,20 +34,36 @@ export default function AttendancePage() {
   const [printDate, setPrintDate] = useState(new Date().toISOString().split('T')[0])
   const today = new Date().toISOString().split('T')[0]
 
-  const markedCount = students.filter(s=>s.status).length
-  const presentCount = students.filter(s=>s.status==='present').length
-  const absentCount = students.filter(s=>s.status==='absent').length
-  const lateCount = students.filter(s=>s.status==='late').length
-  const sportCount = students.filter(s=>s.status==='sport').length
-  const pct = students.length > 0 ? Math.round((markedCount/students.length)*100) : 0
+  const syncOff = useCallback(async () => {
+    if (!user) return
+    const pending: Array<{ records: AttendanceRecord[] }> = JSON.parse(localStorage.getItem('edutrack_offline_attendance') || '[]')
+    for (let i = 0; i < pending.length; i++) {
+      const batch = pending[i]
+      if (!batch.records.length || batch.records.some(record => record.school_id !== user.school_id || record.marked_by !== user.id)) continue
+      try {
+        await saveAttendance(supabase, batch.records)
+        pending.splice(i--, 1)
+        localStorage.setItem('edutrack_offline_attendance', JSON.stringify(pending))
+        setPendingSync(pending.length)
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : 'Could not sync attendance. Your offline records are retained.')
+        return
+      }
+    }
+  }, [user])
 
-  useEffect(() => { setIsOnline(navigator.onLine); const on=()=>{setIsOnline(true);syncOff()}; const off=()=>setIsOnline(false); window.addEventListener('online',on); window.addEventListener('offline',off); setPendingSync(JSON.parse(localStorage.getItem('edutrack_offline_attendance')||'[]').length); return ()=>{window.removeEventListener('online',on);window.removeEventListener('offline',off)} }, [])
+  const loadStudents = useCallback(async (cid:string,period:number) => {
+    if(!user)return
+    setSc(cid);setSp(period);setSaved(false);setFocusIdx(0)
+    const{data:cs}=await supabase.from('class_students').select('student_id,students(id,name,surname,photo_url)').eq('class_id',cid).limit(500)
+    const{data:ex}=await supabase.from('attendance').select('student_id,status,note').eq('class_id',cid).eq('date',today).eq('period',period)
+    const am=new Map<string,string>()
+    const nm=new Map<string,string>()
+    ;(ex||[]).forEach((a:{student_id:string;status:string;note?:string|null})=>{am.set(a.student_id,a.status);if(a.note)nm.set(a.student_id,a.note)})
+    setStudents((cs||[]).map((c:Record<string,unknown>)=>{const s=c.students as{id:string;name:string;surname:string;photo_url:string|null};return{student_id:s.id,name:s.name,surname:s.surname,photo_url:s.photo_url,status:(am.get(s.id) as SA['status'])||null,note:nm.get(s.id)||null}}).sort((a:SA,b:SA)=>a.surname.localeCompare(b.surname)))
+  }, [user, today])
 
-  async function syncOff() { const p=JSON.parse(localStorage.getItem('edutrack_offline_attendance')||'[]'); if(!p.length)return; for(const b of p){try{await supabase.from('attendance').delete().eq('class_id',b.class_id).eq('date',b.date).eq('period',b.period);if(b.records.length>0)await supabase.from('attendance').insert(b.records)}catch(e){return}} localStorage.removeItem('edutrack_offline_attendance');setPendingSync(0)}
-
-  useEffect(()=>{if(user)loadInit()},[user])
-
-  async function loadInit(){
+  const loadInit = useCallback(async () => {
     if(!user)return
     const{data:s}=await supabase.from('schools').select('periods_per_day').eq('id',user.school_id).single()
     if(s)setPpd(s.periods_per_day)
@@ -57,20 +77,27 @@ export default function AttendancePage() {
       setAc(Array.from(m.values()))
     }
     const lastCid = typeof window !== 'undefined' ? sessionStorage.getItem('edutrack_last_class') : null
-    if (lastCid) { await loadStudents(lastCid, sp); localStorage.setItem('edutrack_default_period', String(sp)) }
+    if (lastCid) { const initialPeriod = Number(localStorage.getItem('edutrack_default_period')) || 1; await loadStudents(lastCid, initialPeriod) }
     setLoading(false)
-  }
+  }, [user, loadStudents])
 
-  async function loadStudents(cid:string,period:number){
-    if(!user)return
-    setSc(cid);setSp(period);setSaved(false);setFocusIdx(0)
-    const{data:cs}=await supabase.from('class_students').select('student_id,students(id,name,surname,photo_url)').eq('class_id',cid).limit(500)
-    const{data:ex}=await supabase.from('attendance').select('student_id,status,note').eq('class_id',cid).eq('date',today).eq('period',period)
-    const am=new Map<string,string>()
-    const nm=new Map<string,string>()
-    ;(ex||[]).forEach((a:{student_id:string;status:string;note?:string|null})=>{am.set(a.student_id,a.status);if(a.note)nm.set(a.student_id,a.note)})
-    setStudents((cs||[]).map((c:Record<string,unknown>)=>{const s=c.students as{id:string;name:string;surname:string;photo_url:string|null};return{student_id:s.id,name:s.name,surname:s.surname,photo_url:s.photo_url,status:(am.get(s.id) as SA['status'])||null,note:nm.get(s.id)||null}}).sort((a:SA,b:SA)=>a.surname.localeCompare(b.surname)))
-  }
+  const quickMark = useCallback((st:'present'|'absent'|'late'|'sport') => {
+    if(students.length===0||!sc)return
+    const unmarked = students.filter(s=>!s.status)
+    if(unmarked.length===0)return
+    const sid = unmarked[0].student_id
+    setStudents(students.map(s=>s.student_id===sid?{...s,status:st}:s))
+    setSaved(false)
+    const nextUnmarked = students.findIndex(s=>s.student_id===sid)
+    setFocusIdx(nextUnmarked >= 0 ? nextUnmarked : 0)
+  }, [students, sc])
+
+  const markedCount = students.filter(s=>s.status).length
+  const presentCount = students.filter(s=>s.status==='present').length
+  const absentCount = students.filter(s=>s.status==='absent').length
+  const lateCount = students.filter(s=>s.status==='late').length
+  const sportCount = students.filter(s=>s.status==='sport').length
+  const pct = students.length > 0 ? Math.round((markedCount/students.length)*100) : 0
 
   function setStatus(sid:string,st:'present'|'absent'|'late'|'sport'){
     setStudents(students.map(s=>s.student_id===sid?{...s,status:st}:s))
@@ -81,33 +108,9 @@ export default function AttendancePage() {
 
   function firstUnmarked(){ const idx = students.findIndex(s=>!s.status); return idx >= 0 ? idx : 0 }
 
-  function quickMark(st:'present'|'absent'|'late'|'sport'){
-    if(students.length===0||!sc)return
-    const unmarked = students.filter(s=>!s.status)
-    if(unmarked.length===0)return
-    const sid = unmarked[0].student_id
-    setStudents(students.map(s=>s.student_id===sid?{...s,status:st}:s))
-    setSaved(false)
-    const nextUnmarked = students.findIndex(s=>s.student_id===sid)
-    setFocusIdx(nextUnmarked >= 0 ? nextUnmarked : 0)
-  }
-
-  useEffect(()=>{
-    if(!sc||students.length===0)return
-    function onKey(e:KeyboardEvent){
-      if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement)return
-      if(e.key==='1')quickMark('present')
-      else if(e.key==='2')quickMark('absent')
-      else if(e.key==='3')quickMark('late')
-      else if(e.key==='4')quickMark('sport')
-    }
-    window.addEventListener('keydown',onKey)
-    return ()=>window.removeEventListener('keydown',onKey)
-  },[sc,students])
-
   async function saveAtt(){
     if(!user)return
-    setSaving(true); setSaved(true)
+    setSaving(true); setSaved(false); setSaveError('')
     const recs=students.filter(s=>s.status).map(s=>({student_id:s.student_id,class_id:sc,date:today,period:sp,status:s.status!,marked_by:user.id,school_id:user.school_id,note:s.note||null}))
     if(!navigator.onLine){
       const p=JSON.parse(localStorage.getItem('edutrack_offline_attendance')||'[]')
@@ -116,24 +119,24 @@ export default function AttendancePage() {
       setPendingSync(p.length); setSaving(false); return
     }
     try{
-      await supabase.from('attendance').delete().eq('class_id',sc).eq('date',today).eq('period',sp)
-      if(recs.length>0)await supabase.from('attendance').insert(recs)
+      await saveAttendance(supabase, recs)
       if(sp===1){
         const absentIds=students.filter(s=>s.status==='absent').map(s=>s.student_id)
         const presentLateIds=students.filter(s=>s.status==='present'||s.status==='late'||s.status==='sport').map(s=>s.student_id)
-        const [_,{data:otherClasses},{data:existingAll},{data:school}]=await Promise.all([
-          presentLateIds.length>0?supabase.from('attendance').delete().eq('date',today).in('student_id',presentLateIds).in('period',Array.from({length:ppd},(_,i)=>i+1).filter(p=>p>sp)):Promise.resolve(null),
-          absentIds.length>0?supabase.from('class_students').select('class_id,student_id').in('student_id',absentIds).limit(5000):Promise.resolve({data:[]}),
-          absentIds.length>0?supabase.from('attendance').select('student_id,period').eq('date',today).in('student_id',absentIds).in('period',Array.from({length:ppd-1},(_,i)=>i+2)):Promise.resolve({data:[]}),
-          supabase.from('schools').select('periods_per_day').eq('id',user.school_id).single()
+        const [,{data:otherClasses},{data:existingAll},{data:school}]=await Promise.all([
+          presentLateIds.length>0?supabase.from('attendance').delete().eq('date',today).eq('school_id',user.school_id).eq('status','absent').eq('marked_by',user.id).in('student_id',presentLateIds).in('period',Array.from({length:ppd},(_,i)=>i+1).filter(p=>p>sp)).throwOnError():Promise.resolve(null),
+          absentIds.length>0?supabase.from('class_students').select('class_id,student_id').in('student_id',absentIds).limit(5000).throwOnError():Promise.resolve({data:[]}),
+          absentIds.length>0?supabase.from('attendance').select('student_id,period').eq('date',today).in('student_id',absentIds).in('period',Array.from({length:ppd-1},(_,i)=>i+2)).throwOnError():Promise.resolve({data:[]}),
+          supabase.from('schools').select('periods_per_day').eq('id',user.school_id).single().throwOnError()
         ] as const)
-        const ppdVal = (school as {periods_per_day:number})?.periods_per_day || 8
+        const ppdVal = (school as {periods_per_day:number})?.periods_per_day || ppd
         const existingSet=new Set((existingAll||[]).map((e:{student_id:string;period:number})=>`${e.student_id}_${e.period}`))
         const inserts:Array<{student_id:string;class_id:string;date:string;period:number;status:string;marked_by:string;school_id:string}>=[]
-        for(const cs of otherClasses||[]){const sid=cs.student_id as string;for(let p2=2;p2<=ppdVal;p2++){if(!existingSet.has(`${sid}_${p2}`))inserts.push({student_id:sid,class_id:cs.class_id as string,date:today,period:p2,status:'absent',marked_by:user.id,school_id:user.school_id})}}
-        if(inserts.length>0)await supabase.from('attendance').insert(inserts)
+        for(const cs of otherClasses||[]){const sid=cs.student_id as string;for(let p2=2;p2<=ppdVal;p2++){if(!existingSet.has(`${sid}_${p2}`)){ inserts.push({student_id:sid,class_id:cs.class_id as string,date:today,period:p2,status:'absent',marked_by:user.id,school_id:user.school_id}); existingSet.add(`${sid}_${p2}`) }}}
+        if(inserts.length>0) await saveAttendance(supabase, inserts)
       }
-    }catch(e){ console.error('saveAtt error:',e); setSaved(false) }
+      setSaved(true)
+    }catch(e){ console.error('saveAtt error:',e); setSaved(false); setSaveError(e instanceof Error ? e.message : 'Could not save attendance') }
     setSaving(false)
   }
 
@@ -163,10 +166,26 @@ export default function AttendancePage() {
     setPrintOpen(false)
   }
 
+  useEffect(() => { const timer=setTimeout(()=>{setIsOnline(navigator.onLine);setPendingSync(JSON.parse(localStorage.getItem('edutrack_offline_attendance')||'[]').length)},0); const on=()=>{setIsOnline(true);syncOff()}; const off=()=>setIsOnline(false); window.addEventListener('online',on); window.addEventListener('offline',off); return ()=>{clearTimeout(timer);window.removeEventListener('online',on);window.removeEventListener('offline',off)} }, [syncOff])
+  useLoadEffect(loadInit)
+  useEffect(()=>{
+    if(!sc||students.length===0)return
+    function onKey(e:KeyboardEvent){
+      if(e.target instanceof HTMLInputElement||e.target instanceof HTMLSelectElement||e.target instanceof HTMLTextAreaElement)return
+      if(e.key==='1')quickMark('present')
+      else if(e.key==='2')quickMark('absent')
+      else if(e.key==='3')quickMark('late')
+      else if(e.key==='4')quickMark('sport')
+    }
+    window.addEventListener('keydown',onKey)
+    return ()=>window.removeEventListener('keydown',onKey)
+  },[quickMark, sc, students])
+
   if(loading)return<div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
 
   return(
     <div className="space-y-4">
+      {saveError && <p role="alert" className="text-sm text-red-600">{saveError}</p>}
       {!isOnline&&<div className="flex items-center gap-2 p-3 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm font-medium"><div className="w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse" />Offline. Saved locally.</div>}
       {isOnline&&pendingSync>0&&<div className="flex items-center justify-between p-3 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm"><span>{pendingSync} pending</span><Button size="sm" onClick={syncOff} style={{background:'#2563EB'}}>Sync</Button></div>}
 

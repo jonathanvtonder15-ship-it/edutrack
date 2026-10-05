@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,8 +12,8 @@ export default function SchoolInfoPage(){
   const [school,setSchool]=useState<{name:string;timetable_type:string;periods_per_day:number;school_start?:string;school_end?:string}|null>(null)
   const [stats,setStats]=useState({students:0,classes:0,teachers:0,subjects:0})
   const [loading,setLoading]=useState(true)
-  useEffect(()=>{if(user)load()},[user])
-  async function load(){
+
+  const load = useCallback(async () => {
     if(!user)return
     const [sR,stR,cR,tR,subR]=await Promise.all([
       supabase.from('schools').select('*').eq('id',user.school_id).single(),
@@ -23,7 +25,10 @@ export default function SchoolInfoPage(){
     if(sR.data)setSchool(sR.data)
     setStats({students:stR.count||0,classes:cR.count||0,teachers:tR.count||0,subjects:subR.count||0})
     setLoading(false)
-  }
+  }, [user])
+
+  useLoadEffect(load)
+
   if(loading)return<div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
   if(!school)return null
   const hasTimes = school.school_start || school.school_end
@@ -59,11 +64,4 @@ export default function SchoolInfoPage(){
     </div>
   )
 }
-
-
-
-
-
-
-
 

@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -64,12 +66,7 @@ export default function CommunityServicePage() {
   const [regDateFrom, setRegDateFrom] = useState(() => { const d = new Date(); d.setDate(d.getDate() - d.getDay() + 1); return d.toISOString().split('T')[0] })
   const [regDateTo, setRegDateTo] = useState(new Date().toISOString().split('T')[0])
 
-  const isAdmin = user?.role === 'admin' || user?.role === 'smt' || user?.role === 'admin-teacher'
-  const canDelete = user?.role === 'admin' || user?.role === 'admin-teacher'
-
-  useEffect(() => { if (user) load() }, [user])
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return
     setLoading(true)
     try {
@@ -91,7 +88,10 @@ export default function CommunityServicePage() {
       })))
       if (pR.data) { setPeriod({ id: pR.data.id, start_date: pR.data.start_date || '', end_date: pR.data.end_date || '', required_breaks: pR.data.required_breaks ?? null }) }
     } catch (e) { console.error('community_service load error:', e) } finally { setLoading(false) }
-  }
+  }, [user])
+
+  const isAdmin = user?.role === 'admin' || user?.role === 'smt' || user?.role === 'admin-teacher'
+  const canDelete = user?.role === 'admin' || user?.role === 'admin-teacher'
 
   async function loadStudents(rc: string) { setSelClass(rc); setSelStudent(''); const { data } = await supabase.from('students').select('id,name,surname,photo_url').eq('school_id', user!.school_id).eq('register_class', rc).order('surname'); setStudents(data || []) }
   async function loadRegStudents(cls: string) {
@@ -179,6 +179,8 @@ export default function CommunityServicePage() {
   const distinctLearners = new Set(logDutyRecords.map(r => r.student_name)).size
   const periodSet = period.start_date && period.end_date
   const regDates = getWeekdaysInRange(regDateFrom, regDateTo)
+
+  useLoadEffect(load)
 
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-green-500" /></div>
 

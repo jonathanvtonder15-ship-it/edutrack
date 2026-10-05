@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -36,8 +38,8 @@ export default function StudentsPage() {
   const [bulkPhotoFiles,setBulkPhotoFiles]=useState<File[]>([])
   const [bulkPhotoBusy,setBulkPhotoBusy]=useState(false)
   const [bulkPhotoResult,setBulkPhotoResult]=useState<{matched:number;unmatched:string[]}|null>(null)
-  useEffect(()=>{if(user)load()},[user])
-  async function load(){
+
+  const load = useCallback(async () => {
     if(!user)return
     const[sR,cR]=await Promise.all([
       supabase.from('students').select('id,student_number,name,surname,grade,photo_url,register_class').eq('school_id',user.school_id).order('surname'),
@@ -45,7 +47,7 @@ export default function StudentsPage() {
     ])
     const studentList = (sR.data||[]) as SR[]
     const ids = studentList.map(s=>s.id)
-    let cm = new Map<string,string[]>()
+    const cm = new Map<string,string[]>()
     if(ids.length>0){
       const{data:csData}=await supabase.from('class_students').select('student_id,classes(name)').in('student_id',ids)
       ;(csData||[]).forEach((c:Record<string,unknown>)=>{const sid=c.student_id as string;const cn=(c.classes as{name:string})?.name||'';if(!cm.has(sid))cm.set(sid,[]);cm.get(sid)!.push(cn)})
@@ -53,7 +55,8 @@ export default function StudentsPage() {
     setStudents(studentList.map((s)=>({...s,classes:cm.get(s.id)||[]})))
     if(cR.data)setClasses(cR.data)
     setLoading(false)
-  }
+  }, [user])
+
   function handleFile(e:React.ChangeEvent<HTMLInputElement>){const f=e.target.files?.[0];if(!f)return;const r=new FileReader();r.onload=(ev)=>{const wb=XLSX.read(ev.target?.result,{type:'binary'});const j=XLSX.utils.sheet_to_json<Record<string,string>>(wb.Sheets[wb.SheetNames[0]]);if(j.length>0){setSheetData(j);setSheetCols(Object.keys(j[0]));const c=Object.keys(j[0]).map(k=>k.toLowerCase());setMapping({id_col:Object.keys(j[0]).find(k=>c[Object.keys(j[0]).indexOf(k)]?.includes('id'))||'',name_col:Object.keys(j[0]).find(k=>c[Object.keys(j[0]).indexOf(k)]?.includes('name')&&!c[Object.keys(j[0]).indexOf(k)]?.includes('sur'))||'',surname_col:Object.keys(j[0]).find(k=>c[Object.keys(j[0]).indexOf(k)]?.includes('surname'))||'',combined_name:false,grade_col:Object.keys(j[0]).find(k=>c[Object.keys(j[0]).indexOf(k)]?.includes('grade'))||''});setMappingStep(true)}};r.readAsBinaryString(f)}
   async function importStudents(){if(!user||!sheetData.length)return;setUploading(true);const recs=sheetData.map(row=>{let n='',s='';if(mapping.combined_name){const f=(row[mapping.name_col]||'').trim().split(' ');n=f[0]||'';s=f.slice(1).join(' ')||''}else{n=(row[mapping.name_col]||'').trim();s=(row[mapping.surname_col]||'').trim()};return{student_number:row[mapping.id_col]||null,name:n,surname:s,grade:mapping.grade_col?parseInt(row[mapping.grade_col])||null:null,school_id:user.school_id}}).filter(r=>r.name&&r.surname);await supabase.from('students').insert(recs);await load();setUploadOpen(false);setSheetData([]);setMappingStep(false);setUploading(false)}
   async function addStudent(){if(!user||!newStudent.name||!newStudent.surname)return;const{data}=await supabase.from('students').insert({name:newStudent.name,surname:newStudent.surname,student_number:newStudent.student_number||null,grade:newStudent.grade?parseInt(newStudent.grade):null,school_id:user.school_id}).select().single();if(data&&newStudent.class_id)await supabase.from('class_students').insert({student_id:data.id,class_id:newStudent.class_id});if(data){await load();setAddOpen(false);setNewStudent({name:'',surname:'',student_number:'',grade:'',class_id:''})}}
@@ -68,6 +71,9 @@ export default function StudentsPage() {
   const registerClasses=[...new Set(students.map(s=>s.register_class).filter(Boolean))].sort() as string[]
   const filtered=students.filter(s=>`${s.name} ${s.surname} ${s.student_number||''}`.toLowerCase().includes(search.toLowerCase())&&(gradeFilter==='all'||s.grade===gradeFilter))
   const canEdit=user?.role==='admin'||user?.role==='smt'||user?.role==='admin-teacher'
+
+  useLoadEffect(load)
+
   if(!user)return null
   return(<div className="space-y-4">
     <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between"><div className="relative flex-1 max-w-md"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><Input placeholder="Search students..." value={search} onChange={e=>setSearch(e.target.value)} className="pl-9" /></div>{canEdit&&<div className="flex gap-2 flex-wrap"><Button size="sm" variant="outline" onClick={()=>setUploadOpen(true)}><Upload className="w-4 h-4 mr-2" />Upload</Button><Button size="sm" variant="outline" onClick={()=>{setBulkPhotoFiles([]);setBulkPhotoResult(null);setBulkPhotoOpen(true)}}><Images className="w-4 h-4 mr-2" />Bulk Photos</Button><Button size="sm" style={{background:'#2563EB'}} onClick={()=>setAddOpen(true)}><Plus className="w-4 h-4 mr-2" />Add</Button></div>}</div>

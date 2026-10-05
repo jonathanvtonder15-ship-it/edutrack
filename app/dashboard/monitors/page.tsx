@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -56,10 +58,16 @@ export default function MonitorsPage() {
   const [mSearch, setMSearch] = useState('')
   const [addingMonitor, setAddingMonitor] = useState(false)
 
-  useEffect(() => { if (user && canAccess) loadAll() }, [user])
+  const computeTotals = useCallback((rows: Record<string, unknown>[], monitors: Monitor[]) => {
+    const agg = new Map<string, { papers: number; handins: number; last_date: string }>()
+    for (const r of rows) { const mid = (r.monitor_id as string) || ''; if (!mid) continue; const e = agg.get(mid) || { papers: 0, handins: 0, last_date: '' }; e.papers += Number(r.paper_count) || 0; e.handins += 1; if (!e.last_date || (r.date as string) > e.last_date) e.last_date = r.date as string; agg.set(mid, e) }
+    setTotals(monitors.map(mn => { const a = agg.get(mn.id); return { monitor_id: mn.id, name: mn.name, photo_url: mn.photo_url, grade: mn.grade, papers: a?.papers || 0, handins: a?.handins || 0, last_date: a?.last_date || '' } }))
+  }, [])
 
-  async function loadAll() {
-    if (!user) return
+  const loadDuty = useCallback(async (date: string) => { if (!user) return; const { data } = await supabase.from('on_duty_register').select('monitor_id,break1,break2').eq('school_id', user.school_id).eq('date', date); const map: Record<string, { b1: boolean; b2: boolean }> = {}; for (const d of (data || [])) { const r = d as Record<string, unknown>; map[r.monitor_id as string] = { b1: !!r.break1, b2: !!r.break2 } }; setDuty(map) }, [user])
+
+  const loadAll = useCallback(async () => {
+    if (!user || !canAccess) return
     setLoading(true)
     const [mR, hR, sR, dR, tR] = await Promise.all([
       supabase.from('monitors').select('id,name,student_id,photo_url,grade').eq('school_id', user.school_id).order('name'),
@@ -76,19 +84,11 @@ export default function MonitorsPage() {
     computeTotals(hR.data || [], (mR.data || []) as Monitor[])
     await loadDuty(dutyDate)
     setLoading(false)
-  }
-
-  function computeTotals(rows: Record<string, unknown>[], monitors: Monitor[]) {
-    const agg = new Map<string, { papers: number; handins: number; last_date: string }>()
-    for (const r of rows) { const mid = (r.monitor_id as string) || ''; if (!mid) continue; const e = agg.get(mid) || { papers: 0, handins: 0, last_date: '' }; e.papers += Number(r.paper_count) || 0; e.handins += 1; if (!e.last_date || (r.date as string) > e.last_date) e.last_date = r.date as string; agg.set(mid, e) }
-    setTotals(monitors.map(mn => { const a = agg.get(mn.id); return { monitor_id: mn.id, name: mn.name, photo_url: mn.photo_url, grade: mn.grade, papers: a?.papers || 0, handins: a?.handins || 0, last_date: a?.last_date || '' } }))
-  }
-
-  async function loadDuty(date: string) { if (!user) return; const { data } = await supabase.from('on_duty_register').select('monitor_id,break1,break2').eq('school_id', user.school_id).eq('date', date); const map: Record<string, { b1: boolean; b2: boolean }> = {}; for (const d of (data || [])) { const r = d as Record<string, unknown>; map[r.monitor_id as string] = { b1: !!r.break1, b2: !!r.break2 } }; setDuty(map) }
+  }, [user, canAccess, computeTotals, loadDuty, dutyDate])
 
   async function saveHandIn() { if (!user || !hiForm.monitor_id) return; setSavingHI(true); await supabase.from('hand_in_log').insert({ school_id: user.school_id, date: hiForm.date, monitor_id: hiForm.monitor_id, paper_count: parseInt(hiForm.paper_count) || 0, handed_in: hiForm.handed_in, notes: hiForm.notes, on_duty: hiForm.on_duty, recorded_by: user.id }); setHiForm({ date: todayISO(), monitor_id: '', paper_count: '0', handed_in: '', notes: '', on_duty: false }); setHiMonitorSearch(''); setHiMonitorOpen(false); await loadAll(); setSavingHI(false) }
 
-  async function deleteHandIn(id: string) { await supabase.from('hand_in_log').delete().eq('id', id); const next = handInLog.filter(r => r.id !== id); setHandInLog(next); computeTotals(next as any, monitors) }
+  async function deleteHandIn(id: string) { await supabase.from('hand_in_log').delete().eq('id', id); const next = handInLog.filter(r => r.id !== id); setHandInLog(next); computeTotals(next.map(row => ({ ...row })), monitors) }
 
   async function saveMonitorDemerit() {
     if (!user || !demForm.type_id || demForm.monitor_ids.length === 0) return
@@ -209,11 +209,13 @@ export default function MonitorsPage() {
   const selectedType = demTypes.find(t => t.id === demForm.type_id)
   const filteredDemMonitors = monitors.filter(m => !demMonitorSearch.trim() || m.name.toLowerCase().includes(demMonitorSearch.trim().toLowerCase()))
 
+  useLoadEffect(loadAll)
+
   if (!user) return null
   if (!canAccess) return <div className="p-8 text-center text-slate-500">Monitor Guardian access required</div>
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
 
-  const tabs: Array<{ key: TabKey; label: string; icon: any }> = [
+  const tabs: Array<{ key: TabKey; label: string; icon: import('lucide-react').LucideIcon }> = [
     { key: 'handin', label: 'Hand-In Log', icon: ClipboardList },
     { key: 'duty', label: 'On-Duty Register', icon: ClipboardCheck },
     { key: 'demerits', label: 'Demerits', icon: AlertTriangle },
@@ -247,7 +249,7 @@ export default function MonitorsPage() {
 
       {tab === 'demerits' && (<>
         <Card className="border-0 shadow-sm"><CardHeader><CardTitle>Give Monitor Demerit</CardTitle></CardHeader><CardContent className="space-y-3">
-          <p className="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2">These demerits are for monitor duty only and do NOT affect the learner's normal school demerits.</p>
+          <p className="text-xs text-slate-600 bg-amber-50 border border-amber-200 rounded-lg p-2">These demerits are for monitor duty only and do NOT affect the learner&apos;s normal school demerits.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="text-xs font-medium text-slate-500 mb-1 block">Demerit (choose from list)</label><select value={demForm.type_id} onChange={e => setDemForm({ ...demForm, type_id: e.target.value })} className="w-full h-10 px-3 rounded-md border text-sm bg-white"><option value="">Select demerit...</option>{demTypes.map(t => <option key={t.id} value={t.id}>{t.name} ({t.points} pt{t.points === 1 ? '' : 's'})</option>)}</select>{demTypes.length === 0 && <p className="text-xs text-amber-600 mt-1">No demerit types yet — add them below first.</p>}</div><div><label className="text-xs font-medium text-slate-500 mb-1 block">Date</label><input type="date" value={demForm.date} onChange={e => setDemForm({ ...demForm, date: e.target.value })} className="w-full h-10 px-3 rounded-md border text-sm bg-white" /></div></div>
           {selectedType && <p className="text-xs text-slate-500">Will give <span className="font-semibold text-amber-600">{selectedType.points} point{selectedType.points === 1 ? '' : 's'}</span> for: {selectedType.name}.</p>}
           <div>
@@ -279,8 +281,4 @@ export default function MonitorsPage() {
     </div>
   )
 }
-
-
-
-
 

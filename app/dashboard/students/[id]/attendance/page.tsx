@@ -1,16 +1,22 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Loader2, ArrowLeft, Download, Check, X, Clock, CalendarDays } from 'lucide-react'
+import { Loader2, ArrowLeft, Download, Check, X, Clock } from 'lucide-react'
 export default function StudentAttendanceReport(){const params=useParams();const router=useRouter();const user=useAppStore(s=>s.user);const studentId=params.id as string;const[student,setStudent]=useState<{name:string;surname:string;student_number:string;grade:number|null}|null>(null);const[records,setRecords]=useState<Array<{date:string;period:number;status:string;class_name:string}>>([]);const[loading,setLoading]=useState(true);const[dateFrom,setDateFrom]=useState(()=>{const d=new Date();d.setMonth(d.getMonth()-1);return d.toISOString().split('T')[0]});const[dateTo,setDateTo]=useState(()=>new Date().toISOString().split('T')[0])
-  useEffect(()=>{if(user&&studentId)load()},[user,studentId,dateFrom,dateTo])
-  async function load(){if(!user)return;setLoading(true);const[sR,aR]=await Promise.all([supabase.from('students').select('name,surname,student_number,grade').eq('id',studentId).single(),supabase.from('attendance').select('date,period,status,classes(name)').eq('student_id',studentId).gte('date',dateFrom).lte('date',dateTo).order('date',{ascending:false}).order('period')]);if(sR.data)setStudent(sR.data);setRecords((aR.data||[]).map((r:Record<string,unknown>)=>({date:r.date as string,period:r.period as number,status:r.status as string,class_name:(r.classes as{name:string})?.name||''})));setLoading(false)}
+
+  const load = useCallback(async () => {if(!user)return;setLoading(true);const[sR,aR]=await Promise.all([supabase.from('students').select('name,surname,student_number,grade').eq('id',studentId).single(),supabase.from('attendance').select('date,period,status,classes(name)').eq('student_id',studentId).gte('date',dateFrom).lte('date',dateTo).order('date',{ascending:false}).order('period')]);if(sR.data)setStudent(sR.data);setRecords((aR.data||[]).map((r:Record<string,unknown>)=>({date:r.date as string,period:r.period as number,status:r.status as string,class_name:(r.classes as{name:string})?.name||''})));setLoading(false)}, [user, studentId, dateFrom, dateTo])
+
   const present=records.filter(r=>r.status==='present').length;const absent=records.filter(r=>r.status==='absent').length;const late=records.filter(r=>r.status==='late').length;const total=records.length;const pPct=total>0?Math.round((present/total)*100):0;const aPct=total>0?Math.round((absent/total)*100):0;const lPct=total>0?Math.round((late/total)*100):0
   function exportPDF(){if(!student)return;const rows=records.map(r=>`<tr><td>${r.date}</td><td>P${r.period}</td><td>${r.class_name}</td><td class="${r.status}">${r.status.toUpperCase()}</td></tr>`).join('');const html=`<!DOCTYPE html><html><head><title>Attendance - ${student.surname}, ${student.name}</title><style>body{font-family:Arial;padding:30px;max-width:800px;margin:0 auto}h1{font-size:20px}.meta{font-size:12px;color:#94a3b8;margin-bottom:16px}.stats{display:flex;gap:12px;margin:16px 0}.stat{flex:1;text-align:center;padding:12px;border-radius:8px;font-size:12px}.stat b{display:block;font-size:22px}.s-green{background:#dcfce7;color:#16a34a}.s-red{background:#fef2f2;color:#dc2626}.s-yellow{background:#fefce8;color:#ca8a04}.s-blue{background:#eff6ff;color:#2563eb}table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #e2e8f0;padding:6px 10px;text-align:left}th{background:#f8fafc}.present{color:#16a34a;font-weight:600}.absent{color:#dc2626;font-weight:600}.late{color:#ca8a04;font-weight:600}.note{margin-top:20px;padding:12px;background:#f8fafc;border-radius:8px;font-size:11px;color:#64748b}</style></head><body><h1>Student Attendance Report</h1><p class="meta">${student.surname}, ${student.name} | ${dateFrom} to ${dateTo}</p><div class="stats"><div class="stat s-green"><b>${pPct}%</b>Present (${present})</div><div class="stat s-red"><b>${aPct}%</b>Absent (${absent})</div><div class="stat s-yellow"><b>${lPct}%</b>Late (${late})</div></div><table><thead><tr><th>Date</th><th>Period</th><th>Class</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table><div class="note"><b>Note:</b> Contact the school if you have concerns.</div></body></html>`;const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();w.setTimeout(()=>w.print(),500)}}
+
+  useLoadEffect(load)
+
   if(loading)return<div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
   if(!student)return<div className="text-center py-12 text-slate-500">Not found</div>
   return(<div className="max-w-3xl space-y-6">

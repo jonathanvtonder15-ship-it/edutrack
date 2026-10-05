@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { filterRecipients } from '@/lib/notifications'
@@ -21,13 +23,17 @@ export default function BattingPage(){
   const [formReplacement,setFormReplacement]=useState('')
   const [ppd,setPpd]=useState(8)
   const [submitting,setSubmitting]=useState(false)
-  useEffect(()=>{if(user)load()},[user])
-  async function load(){if(!user)return;const[bR,cR,tR,sR]=await Promise.all([supabase.from('batting').select('*,classes(name),absent:users!batting_absent_teacher_id_fkey(display_name),replacement:users!batting_replacement_teacher_id_fkey(display_name)').eq('school_id',user.school_id).order('date',{ascending:false}).order('period_number'),supabase.from('classes').select('id,name').eq('school_id',user.school_id),supabase.from('users').select('id,display_name').eq('school_id',user.school_id).in('role',['teacher','smt','admin-teacher']),supabase.from('schools').select('periods_per_day').eq('id',user.school_id).single()]);setRecords((bR.data||[]).map((b:Record<string,unknown>)=>({id:b.id as string,date:b.date as string,period_number:b.period_number as number,class_name:(b.classes as{name:string})?.name||'',status:b.status as string,absent_teacher:(b.absent as{display_name:string})?.display_name||'',replacement_teacher:(b.replacement as{display_name:string})?.display_name||null})));if(cR.data)setClasses(cR.data);if(tR.data)setTeachers(tR.data);if(sR.data)setPpd(sR.data.periods_per_day);setLoading(false)}
+
+  const load = useCallback(async () => {if(!user)return;const[bR,cR,tR,sR]=await Promise.all([supabase.from('batting').select('*,classes(name),absent:users!batting_absent_teacher_id_fkey(display_name),replacement:users!batting_replacement_teacher_id_fkey(display_name)').eq('school_id',user.school_id).order('date',{ascending:false}).order('period_number'),supabase.from('classes').select('id,name').eq('school_id',user.school_id),supabase.from('users').select('id,display_name').eq('school_id',user.school_id).in('role',['teacher','smt','admin-teacher']),supabase.from('schools').select('periods_per_day').eq('id',user.school_id).single()]);setRecords((bR.data||[]).map((b:Record<string,unknown>)=>({id:b.id as string,date:b.date as string,period_number:b.period_number as number,class_name:(b.classes as{name:string})?.name||'',status:b.status as string,absent_teacher:(b.absent as{display_name:string})?.display_name||'',replacement_teacher:(b.replacement as{display_name:string})?.display_name||null})));if(cR.data)setClasses(cR.data);if(tR.data)setTeachers(tR.data);if(sR.data)setPpd(sR.data.periods_per_day);setLoading(false)}, [user])
+
   async function declareAbsence(){if(!user||!formClass||!formPeriods.length)return;setSubmitting(true);await supabase.from('batting').insert(formPeriods.map(p=>({absent_teacher_id:user.id,date:formDate,period_number:p,class_id:formClass,school_id:user.school_id,status:'pending'})));await load();setDeclareOpen(false);setFormPeriods([]);setFormClass('');setSubmitting(false)}
   async function allocateReplacement(bid:string){if(!formReplacement||!user)return;await supabase.from('batting').update({replacement_teacher_id:formReplacement,status:'allocated'}).eq('id',bid);const rec=records.find(r=>r.id===bid);const replacement=teachers.find(t=>t.id===formReplacement);const recipIds=new Set<string>();if(formReplacement)recipIds.add(formReplacement);const{data:staff}=await supabase.from('users').select('id').eq('school_id',user.school_id).in('role',['admin','smt','admin-teacher']);(staff||[]).forEach((u:{id:string})=>{if(u.id!==formReplacement)recipIds.add(u.id)});if(recipIds.size>0&&replacement){const filtered=await filterRecipients(Array.from(recipIds),'batting');if(filtered.length>0)await supabase.from('notifications').insert(filtered.map(uid=>({user_id:uid,type:'batting',title:`Relief: ${replacement.display_name} assigned`,message:`${rec?.class_name||'Class'} | Period ${rec?.period_number||'-'} | ${rec?.absent_teacher||'Teacher'} absent on ${rec?.date||''}`,read:false,school_id:user.school_id})))}await load();setAllocateOpen(null);setFormReplacement('')}
   const canAllocate=user?.role==='admin'||user?.role==='smt'||user?.role==='admin-teacher'
   const pending=records.filter(r=>r.status==='pending')
   const allocated=records.filter(r=>r.status!=='pending')
+
+  useLoadEffect(load)
+
   if(loading)return<div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
   return(<div className="space-y-4">
     <div className="flex justify-end"><Button size="sm" style={{background:'#2563EB'}} onClick={()=>setDeclareOpen(true)}><Plus className="w-4 h-4 mr-2" />Declare Absence</Button></div>
@@ -37,9 +43,4 @@ export default function BattingPage(){
     <Dialog open={!!allocateOpen} onOpenChange={()=>setAllocateOpen(null)}><DialogContent><DialogHeader><DialogTitle>Allocate Replacement</DialogTitle></DialogHeader><div className="space-y-3 pt-2"><select value={formReplacement} onChange={e=>setFormReplacement(e.target.value)} className="w-full h-10 px-3 rounded-md border text-sm bg-white"><option value="">Teacher</option>{teachers.map(t=><option key={t.id} value={t.id}>{t.display_name}</option>)}</select><Button onClick={()=>allocateOpen&&allocateReplacement(allocateOpen)} disabled={!formReplacement} className="w-full" style={{background:'#10B981'}}>Allocate</Button></div></DialogContent></Dialog>
   </div>)
 }
-
-
-
-
-
 
