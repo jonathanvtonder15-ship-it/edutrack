@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [keepSignedIn, setKeepSignedIn] = useState(false)
+  const [setupCode, setSetupCode] = useState('')
   const [schoolName, setSchoolName] = useState('')
   const [adminName, setAdminName] = useState('')
   const [adminUsername, setAdminUsername] = useState('')
@@ -37,7 +38,7 @@ export default function LoginPage() {
   async function handleSetup(e: React.FormEvent) {
     e.preventDefault(); setLoading(true); setError('')
     try {
-      const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ school_name: schoolName, admin_username: adminUsername, admin_password: adminPassword, admin_display_name: adminName, timetable_type: timetableType, periods_per_day: parseInt(periodsPerDay) }) })
+      const res = await fetch('/api/setup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setup_code: setupCode, school_name: schoolName, admin_username: adminUsername, admin_password: adminPassword, admin_display_name: adminName, timetable_type: timetableType, periods_per_day: parseInt(periodsPerDay) }) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setUser({ id: data.admin.id, username: data.admin.username, display_name: data.admin.display_name, role: 'admin', school_id: data.school.id, school_name: data.school.name })
@@ -80,12 +81,13 @@ export default function LoginPage() {
               </form>
             ) : (
               <form onSubmit={handleSetup} className="space-y-3">
+                <div><label htmlFor="setup-code" className="text-sm font-medium text-slate-700 mb-1 block">Setup code</label><Input id="setup-code" type="password" autoComplete="off" value={setupCode} onChange={e => setSetupCode(e.target.value)} required placeholder="Provided by your site administrator" /></div>
                 <div><label className="text-sm font-medium text-slate-700 mb-1 block">School Name</label><Input placeholder="e.g. Hoerskool Wonderboom" value={schoolName} onChange={(e) => setSchoolName(e.target.value)} required className="h-10" /></div>
                 <div className="grid grid-cols-2 gap-3"><div><label className="text-sm font-medium text-slate-700 mb-1 block">Timetable</label><select value={timetableType} onChange={(e) => setTimetableType(e.target.value)} className="w-full h-10 px-3 rounded-md border border-slate-200 text-sm bg-white"><option value="5-day">5-Day</option><option value="10-day">10-Day</option></select></div><div><label className="text-sm font-medium text-slate-700 mb-1 block">Periods</label><Input type="number" min="1" max="15" value={periodsPerDay} onChange={(e) => setPeriodsPerDay(e.target.value)} required className="h-10" /></div></div>
                 <hr className="my-1" />
                 <div><label className="text-sm font-medium text-slate-700 mb-1 block">Admin Full Name</label><Input placeholder="e.g. Mr. Van Tonder" value={adminName} onChange={(e) => setAdminName(e.target.value)} required className="h-10" /></div>
                 <div><label className="text-sm font-medium text-slate-700 mb-1 block">Admin Username</label><Input placeholder="e.g. admin" value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} required className="h-10" /></div>
-                <div><label className="text-sm font-medium text-slate-700 mb-1 block">Admin Password</label><Input type="password" placeholder="Choose a strong password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required className="h-10" /></div>
+                <div><label className="text-sm font-medium text-slate-700 mb-1 block">Admin Password</label><Input type="password" minLength={8} placeholder="At least 8 characters" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required className="h-10" /></div>
                 <Button type="submit" disabled={loading} className="w-full h-11 text-base font-semibold" style={{ background: '#2563EB' }}>{loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Create School & Admin'}</Button>
                 <p className="text-center text-sm text-slate-500">Already have an account? <button type="button" onClick={() => { setMode('login'); setError('') }} className="text-blue-600 font-medium hover:underline">Sign in</button></p>
               </form>

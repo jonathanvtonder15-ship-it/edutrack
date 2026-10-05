@@ -12,7 +12,7 @@ export interface AttendanceRecord {
 }
 
 // One atomic database statement preserves the previous register on write failure.
-// Requires database/attendance-unique.sql to have been applied.
+// The full Supabase migration includes the required unique constraint.
 export async function saveAttendance(client: SupabaseClient, records: AttendanceRecord[]) {
   if (!records.length) return
   const { error } = await client.from('attendance').upsert(records, {

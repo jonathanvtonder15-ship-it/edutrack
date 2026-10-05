@@ -30,6 +30,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const { user, logout } = useAppStore()
+  const [verifiedId, setVerifiedId] = useState<string | null>(null)
+  const [sessionError, setSessionError] = useState('')
   const [collapsed, setCollapsed] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -70,19 +72,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   useEffect(() => {
     if (!mounted) return
-    // Read the hydrated store: the render snapshot can still be empty on a hard refresh.
-    if (!useAppStore.getState().user) { router.replace('/'); return }
-    if (!useAppStore.getState().isSessionValid()) { logout(); router.push('/'); return }
+    const stored = useAppStore.getState()
+    if (!stored.user || !stored.isSessionValid()) { logout(); router.replace('/'); return }
+    const controller = new AbortController()
+    void fetch('/api/auth/me', { signal: controller.signal, cache: 'no-store' }).then(async response => {
+      if (response.status === 401) { logout(); router.replace('/'); return }
+      if (!response.ok) throw new Error('Unable to verify your session. Please reload to try again.')
+      const data = await response.json()
+      useAppStore.setState({ user: data.user })
+      setVerifiedId(data.user.id)
+    }).catch(error => { if (!controller.signal.aborted) setSessionError(error.message) })
+    const expired = () => { logout(); router.replace('/') }
+    window.addEventListener('edutrack-session-expired', expired)
+    return () => { controller.abort(); window.removeEventListener('edutrack-session-expired', expired) }
+  }, [mounted, user?.id, router, logout])
+
+  useEffect(() => {
+    if (!verifiedId) return
     const timer = setTimeout(() => { void loadExtra() }, 0)
     return () => clearTimeout(timer)
-  }, [mounted, user, router, loadExtra, logout])
+  }, [verifiedId, loadExtra])
   useEffect(() => {
     if (!banner) return
     const t = setTimeout(() => setBanner(null), 3 * 60 * 1000)
     return () => clearTimeout(t)
   }, [banner])
 
-  if (!mounted || !user) return null
+  if (sessionError) return <div role="alert" className="p-8">{sessionError}</div>
+  if (!mounted || !user || verifiedId !== user.id) return null
   const userRoles = (user?.roles && user.roles.length > 0) ? user.roles : [user.role]
   const filteredNav = navItems.filter(i => i.roles.some(r => userRoles.includes(r)))
   const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href))

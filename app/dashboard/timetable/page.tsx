@@ -48,7 +48,7 @@ export default function TimetablePage() {
       supabase.from('timetable_entries').select('*').eq('school_id', user.school_id),
       supabase.from('classes').select('id,name,grade').eq('school_id', user.school_id).order('grade').order('name'),
       supabase.from('subjects').select('id,name,grade').eq('school_id', user.school_id).order('name'),
-      supabase.from('users').select('id,display_name').eq('school_id', user.school_id).in('role', ['teacher','smt','admin-teacher']),
+      supabase.from('users').select('id,display_name').eq('active', true).eq('school_id', user.school_id).in('role', ['teacher','smt','admin-teacher']),
       supabase.from('allocations').select('class_id,subject_id,user_id,subjects(name),users!allocations_user_id_fkey(display_name)').eq('school_id', user.school_id),
     ])
     if (sR.data) setSchool(sR.data)

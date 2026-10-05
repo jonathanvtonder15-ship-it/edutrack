@@ -19,7 +19,7 @@ export default function SchoolInfoPage(){
       supabase.from('schools').select('*').eq('id',user.school_id).single(),
       supabase.from('students').select('id',{count:'exact',head:true}).eq('school_id',user.school_id),
       supabase.from('classes').select('id',{count:'exact',head:true}).eq('school_id',user.school_id),
-      supabase.from('users').select('id',{count:'exact',head:true}).eq('school_id',user.school_id),
+      supabase.from('users').select('id',{count:'exact',head:true}).eq('active', true).eq('school_id',user.school_id),
       supabase.from('subjects').select('id',{count:'exact',head:true}).eq('school_id',user.school_id),
     ])
     if(sR.data)setSchool(sR.data)

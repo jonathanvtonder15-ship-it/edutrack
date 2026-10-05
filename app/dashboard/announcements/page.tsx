@@ -34,7 +34,7 @@ export default function AnnouncementsPage(){
     if(!user||!form.subject||!form.body) return
     setSending(true)
     await supabase.from('messages').insert({school_id:user.school_id,sender_id:user.id,recipient_id:null,subject:form.subject,body:form.body,is_announcement:true})
-    const { data: staff } = await supabase.from('users').select('id').eq('school_id',user.school_id).in('role',['admin','smt','teacher','admin-teacher'])
+    const { data: staff } = await supabase.from('users').select('id').eq('active', true).eq('school_id',user.school_id).in('role',['admin','smt','teacher','admin-teacher'])
     if(staff && staff.length>0){
       const staffIds = await filterRecipients(staff.map((u:{id:string})=>u.id), 'announcement')
       if(staffIds.length>0) await supabase.from('notifications').insert(staffIds.map(uid=>({user_id:uid,type:'announcement',title:form.subject,message:form.body,read:false,school_id:user.school_id})))

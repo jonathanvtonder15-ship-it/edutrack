@@ -91,7 +91,7 @@ export default function DemeritsPage() {
     setDemerits([...newRecords, ...demerits])
     const className = classes.find(c => c.id === selectedClass)?.name || 'class'
     const totalPts = types.reduce((sum, t) => sum + t.points, 0) * selectedStudents.size
-    const { data: staff } = await supabase.from('users').select('id').eq('school_id', user.school_id).in('role', ['admin', 'smt', 'admin-teacher'])
+    const { data: staff } = await supabase.from('users').select('id').eq('active', true).eq('school_id', user.school_id).in('role', ['admin', 'smt', 'admin-teacher'])
     if (staff && staff.length > 0) {
       const staffIds = await filterRecipients(staff.map((u: { id: string }) => u.id), 'demerit')
       if (staffIds.length > 0) await supabase.from('notifications').insert(staffIds.map(uid => ({ user_id: uid, type: 'demerit', title: `${rows.length} demerits given in ${className}`, message: `${types.map(t=>t.name).join(', ')} (${totalPts} pts) by ${user.display_name}`, read: false, school_id: user.school_id })))
@@ -129,7 +129,7 @@ export default function DemeritsPage() {
     await supabase.from('demerits').insert(rows)
     setDemerits([...newRecords, ...demerits])
     const totalPts = types.reduce((sum, t) => sum + t.points, 0) * selectedIds.length
-    const { data: staff } = await supabase.from('users').select('id').eq('school_id', user.school_id).in('role', ['admin', 'smt', 'admin-teacher'])
+    const { data: staff } = await supabase.from('users').select('id').eq('active', true).eq('school_id', user.school_id).in('role', ['admin', 'smt', 'admin-teacher'])
     if (staff && staff.length > 0) {
       const staffIds = await filterRecipients(staff.map((u: { id: string }) => u.id), 'demerit')
       if (staffIds.length > 0) await supabase.from('notifications').insert(staffIds.map(uid => ({ user_id: uid, type: 'demerit', title: `${rows.length} demerits given`, message: `${types.map(t=>t.name).join(', ')} (${totalPts} pts) by ${user.display_name}`, read: false, school_id: user.school_id })))

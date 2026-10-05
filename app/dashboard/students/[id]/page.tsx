@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
+import { saveStudentPhoto } from '@/lib/student-photos'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,6 +15,7 @@ import { Loader2, ArrowLeft, Save, Camera, Plus, X, BookOpen, AlertTriangle, Awa
 export default function StudentProfilePage() {
   const params = useParams()
   const router = useRouter()
+  const [photoError, setPhotoError] = useState('')
   const user = useAppStore((s) => s.user)
   const studentId = params.id as string
 
@@ -109,15 +111,13 @@ export default function StudentProfilePage() {
   }
 
   async function uploadPhoto(file: File) {
-    if (!student) return
-    const p = `${student.id}.${file.name.split('.').pop()}`
-    const { error } = await supabase.storage.from('student-photos').upload(p, file, { upsert: true })
-    if (!error) {
-      const { data: u } = supabase.storage.from('student-photos').getPublicUrl(p)
-      await supabase.from('students').update({ photo_url: u.publicUrl + '?t=' + Date.now() }).eq('id', student.id)
-      setStudent({ ...student, photo_url: u.publicUrl + '?t=' + Date.now() })
-    }
-    setPhotoOpen(false)
+    if (!student || !user) return
+    setPhotoError('')
+    try {
+      const photo_url = await saveStudentPhoto(user.school_id, student.id, file)
+      setStudent({ ...student, photo_url })
+      setPhotoOpen(false)
+    } catch (error) { setPhotoError(error instanceof Error ? error.message : 'Photo upload failed') }
   }
 
   async function deleteStudent() {
@@ -328,8 +328,8 @@ export default function StudentProfilePage() {
       )}
 
       <Dialog open={photoOpen} onOpenChange={setPhotoOpen}>
-        <DialogContent><DialogHeader><DialogTitle>Upload Photo</DialogTitle></DialogHeader>
-          <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.[0]) uploadPhoto(e.target.files[0]) }} className="text-sm" />
+        <DialogContent><DialogHeader><DialogTitle>Upload Photo</DialogTitle></DialogHeader>{photoError && <p role="alert" className="text-sm text-red-600">{photoError}</p>}
+          <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => { if (e.target.files?.[0]) uploadPhoto(e.target.files[0]) }} className="text-sm" />
         </DialogContent>
       </Dialog>
 

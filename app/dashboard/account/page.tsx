@@ -37,7 +37,7 @@ export default function AccountPage() {
     if (!user) return
     setSavingPw(true); setPwMsg('')
     if (!pw.current || !pw.next) { setPwMsg('Fill in current and new password.'); setSavingPw(false); return }
-    if (pw.next.length < 6) { setPwMsg('New password must be at least 6 characters.'); setSavingPw(false); return }
+    if (pw.next.length < 8) { setPwMsg('New password must be at least 8 characters.'); setSavingPw(false); return }
     if (pw.next !== pw.confirm) { setPwMsg('New passwords do not match.'); setSavingPw(false); return }
     try {
       const res = await fetch('/api/auth/account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: pw.current, password: pw.next }) })
