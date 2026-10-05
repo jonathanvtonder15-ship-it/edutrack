@@ -21,6 +21,8 @@ from `npx supabase status` for the corresponding Supabase variables. Generate
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
+Production builds require `NEXT_PUBLIC_APP_URL`; there is no production localhost fallback.
+
 Run `npm run dev` and open <http://localhost:3000>. Choose **Set up here**, enter
 the setup code and create your school administrator. Passwords require at least
 8 characters. Create staff under **Staff**, then classes, students and allocations.

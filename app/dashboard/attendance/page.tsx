@@ -3,7 +3,7 @@
 import { useLoadEffect } from '@/hooks/use-load-effect'
 import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
-import { saveAttendance, type AttendanceRecord } from '@/lib/attendance'
+import { saveAttendance, insertGeneratedAbsences, canSyncAttendance, type AttendanceRecord } from '@/lib/attendance'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -37,14 +37,15 @@ export default function AttendancePage() {
   const syncOff = useCallback(async () => {
     if (!user) return
     const pending: Array<{ records: AttendanceRecord[] }> = JSON.parse(localStorage.getItem('edutrack_offline_attendance') || '[]')
+    setPendingSync(pending.filter(batch => canSyncAttendance(batch, user)).length)
     for (let i = 0; i < pending.length; i++) {
       const batch = pending[i]
-      if (!batch.records.length || batch.records.some(record => record.school_id !== user.school_id || record.marked_by !== user.id)) continue
+      if (!canSyncAttendance(batch, user)) continue
       try {
         await saveAttendance(supabase, batch.records)
         pending.splice(i--, 1)
         localStorage.setItem('edutrack_offline_attendance', JSON.stringify(pending))
-        setPendingSync(pending.length)
+        setPendingSync(pending.filter(batch => canSyncAttendance(batch, user)).length)
       } catch (error) {
         setSaveError(error instanceof Error ? error.message : 'Could not sync attendance. Your offline records are retained.')
         return
@@ -116,10 +117,12 @@ export default function AttendancePage() {
       const p=JSON.parse(localStorage.getItem('edutrack_offline_attendance')||'[]')
       p.push({class_id:sc,date:today,period:sp,records:recs})
       localStorage.setItem('edutrack_offline_attendance',JSON.stringify(p))
-      setPendingSync(p.length); setSaving(false); return
+      setPendingSync(p.filter((batch: { records: AttendanceRecord[] }) => canSyncAttendance(batch, user)).length); setSaving(false); return
     }
+    let periodOneSaved = false
     try{
       await saveAttendance(supabase, recs)
+      periodOneSaved = sp === 1 && recs.length > 0
       if(sp===1){
         const absentIds=students.filter(s=>s.status==='absent').map(s=>s.student_id)
         const presentLateIds=students.filter(s=>s.status==='present'||s.status==='late'||s.status==='sport').map(s=>s.student_id)
@@ -133,10 +136,10 @@ export default function AttendancePage() {
         const existingSet=new Set((existingAll||[]).map((e:{student_id:string;period:number})=>`${e.student_id}_${e.period}`))
         const inserts:Array<{student_id:string;class_id:string;date:string;period:number;status:string;marked_by:string;school_id:string}>=[]
         for(const cs of otherClasses||[]){const sid=cs.student_id as string;for(let p2=2;p2<=ppdVal;p2++){if(!existingSet.has(`${sid}_${p2}`)){ inserts.push({student_id:sid,class_id:cs.class_id as string,date:today,period:p2,status:'absent',marked_by:user.id,school_id:user.school_id}); existingSet.add(`${sid}_${p2}`) }}}
-        if(inserts.length>0) await saveAttendance(supabase, inserts)
+        if(inserts.length>0) await insertGeneratedAbsences(supabase, inserts)
       }
       setSaved(true)
-    }catch(e){ console.error('saveAtt error:',e); setSaved(false); setSaveError(e instanceof Error ? e.message : 'Could not save attendance') }
+    }catch(e){ console.error('saveAtt error:',e); setSaved(false); setSaveError(periodOneSaved ? 'Period 1 was saved, but later-period processing failed. Please retry. ' + (e instanceof Error ? e.message : '') : e instanceof Error ? e.message : 'Could not save attendance') }
     setSaving(false)
   }
 
@@ -166,7 +169,7 @@ export default function AttendancePage() {
     setPrintOpen(false)
   }
 
-  useEffect(() => { const timer=setTimeout(()=>{setIsOnline(navigator.onLine);setPendingSync(JSON.parse(localStorage.getItem('edutrack_offline_attendance')||'[]').length)},0); const on=()=>{setIsOnline(true);syncOff()}; const off=()=>setIsOnline(false); window.addEventListener('online',on); window.addEventListener('offline',off); return ()=>{clearTimeout(timer);window.removeEventListener('online',on);window.removeEventListener('offline',off)} }, [syncOff])
+  useEffect(() => { const timer=setTimeout(()=>{setIsOnline(navigator.onLine);setPendingSync(JSON.parse(localStorage.getItem('edutrack_offline_attendance')||'[]').filter((batch: { records: AttendanceRecord[] }) => user && canSyncAttendance(batch, user)).length)},0); const on=()=>{setIsOnline(true);syncOff()}; const off=()=>setIsOnline(false); window.addEventListener('online',on); window.addEventListener('offline',off); return ()=>{clearTimeout(timer);window.removeEventListener('online',on);window.removeEventListener('offline',off)} }, [syncOff, user])
   useLoadEffect(loadInit)
   useEffect(()=>{
     if(!sc||students.length===0)return

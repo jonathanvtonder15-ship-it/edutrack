@@ -8,7 +8,7 @@ export async function saveStudentPhoto(schoolId: string, studentId: string, file
   const { error } = await supabase.storage.from('student-photos').upload(path, file, { upsert: true })
   if (error) throw new Error('Photo upload failed. Please try again.')
   const url = studentPhotoUrl(path) + '?t=' + Date.now()
-  const result = await supabase.from('students').update({ photo_url: url }).eq('id', studentId).select('id').single()
+  const result = await supabase.from('students').update({ photo_url: url }).eq('id', studentId).eq('school_id', schoolId).select('id').single()
   if (result.error) throw new Error('Could not save the photo to this student. Please try again.')
   return url
 }

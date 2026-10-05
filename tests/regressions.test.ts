@@ -32,3 +32,19 @@ test('attendance writes atomically, surfaces failures and never deletes the prev
   assert.equal(calls.length, 2)
   assert.deepEqual(calls[0], { rows, options: { onConflict: 'student_id,class_id,date,period' } })
 })
+
+test('offline attendance counts only the current school and marker without discarding other batches', async () => {
+  const { canSyncAttendance } = await import('../lib/attendance')
+  const record: AttendanceRecord = { student_id:'learner',class_id:'class',date:'2026-10-05',period:1,status:'present',marked_by:'teacher',school_id:'school' }
+  const queue = [
+    {records:[record]},
+    {records:[{...record,marked_by:'other-teacher'}]},
+    {records:[{...record,school_id:'other-school'}]},
+    {records:[record,{...record,marked_by:'other-teacher'}]},
+    {records:[]},
+  ]
+  const snapshot = structuredClone(queue)
+  assert.equal(queue.filter(batch => canSyncAttendance(batch,{id:'teacher',school_id:'school'})).length,1)
+  assert.equal(queue.filter(batch => canSyncAttendance(batch,{id:'other-teacher',school_id:'school'})).length,1)
+  assert.deepEqual(queue,snapshot)
+})

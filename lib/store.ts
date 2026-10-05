@@ -15,6 +15,7 @@ interface UserSession {
 
 interface AppState {
   user: UserSession | null
+  logoutWarning: string | null
   loginTime: number | null
   keepSignedIn: boolean
   setUser: (user: UserSession | null, keepSignedIn?: boolean) => void
@@ -31,12 +32,20 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       user: null,
+      logoutWarning: null,
       loginTime: null,
       keepSignedIn: false,
-      setUser: (user, keepSignedIn = get().keepSignedIn) => set({ user, loginTime: user ? Date.now() : null, keepSignedIn }),
+      setUser: (user, keepSignedIn = get().keepSignedIn) => set({ user, logoutWarning: null, loginTime: user ? Date.now() : null, keepSignedIn }),
       logout: () => {
-        void fetch('/api/auth/logout', { method: 'POST' }).catch(() => { /* Local session is still cleared when offline. */ })
-        set({ user: null, loginTime: null, keepSignedIn: false })
+        set({ user: null, loginTime: null, keepSignedIn: false, logoutWarning: null })
+        void (async () => {
+          try {
+            const response = await fetch('/api/auth/logout', { method: 'POST' })
+            if (!response.ok) throw new Error('Server sign-out failed')
+          } catch {
+            if (!get().user) set({ logoutWarning: 'Signed out on this device, but server sign-out could not be confirmed. Reconnect and retry before leaving a shared device.' })
+          }
+        })()
       },
       isSessionValid: () => {
         const { loginTime, keepSignedIn } = get()

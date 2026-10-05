@@ -25,7 +25,7 @@ export default function TimetablePage() {
   const [entries, setEntries] = useState<Array<{id:string;day_number:number;period_number:number;class_id:string;subject_id:string|null;teacher_id:string}>>([])
   const [classes, setClasses] = useState<Array<{id:string;name:string;grade:number}>>([])
   const [subjects, setSubjects] = useState<Array<{id:string;name:string;grade:number}>>([])
-  const [teachers, setTeachers] = useState<Array<{id:string;display_name:string}>>([])
+  const [teachers, setTeachers] = useState<Array<{id:string;display_name:string;active:boolean}>>([])
   const [allocs, setAllocs] = useState<Array<{class_id:string;subject_id:string|null;teacher_id:string;subject_name:string;teacher_name:string}>>([])
   const [loading, setLoading] = useState(true)
   const [addOpen, setAddOpen] = useState(false)
@@ -48,7 +48,7 @@ export default function TimetablePage() {
       supabase.from('timetable_entries').select('*').eq('school_id', user.school_id),
       supabase.from('classes').select('id,name,grade').eq('school_id', user.school_id).order('grade').order('name'),
       supabase.from('subjects').select('id,name,grade').eq('school_id', user.school_id).order('name'),
-      supabase.from('users').select('id,display_name').eq('active', true).eq('school_id', user.school_id).in('role', ['teacher','smt','admin-teacher']),
+      supabase.from('users').select('id,display_name,active').eq('school_id', user.school_id).in('role', ['teacher','smt','admin-teacher']),
       supabase.from('allocations').select('class_id,subject_id,user_id,subjects(name),users!allocations_user_id_fkey(display_name)').eq('school_id', user.school_id),
     ])
     if (sR.data) setSchool(sR.data)
@@ -69,8 +69,10 @@ export default function TimetablePage() {
     setLoading(false)
   }, [user])
 
+  const activeTeachers = teachers.filter(t => t.active)
+
   function onClassSelect(classId: string) {
-    const ca = allocs.filter(a => a.class_id === classId)
+    const ca = allocs.filter(a => a.class_id === classId && activeTeachers.some(t => t.id === a.teacher_id))
     if (ca.length === 1) setForm(f => ({ ...f, class_id: classId, subject_id: ca[0].subject_id || '', teacher_id: ca[0].teacher_id }))
     else setForm(f => ({ ...f, class_id: classId }))
   }
@@ -82,7 +84,7 @@ export default function TimetablePage() {
   }
 
   async function addEntry() {
-    if (!user || !form.class_id || !form.teacher_id) return
+    if (!user || !form.class_id || !activeTeachers.some(t => t.id === form.teacher_id)) return
     setSaving(true)
     const day = clickedCell?.day || 1
     await supabase.from('timetable_entries').insert({ school_id: user.school_id, day_number: day, period_number: parseInt(form.period), class_id: form.class_id, subject_id: form.subject_id || null, teacher_id: form.teacher_id })
@@ -136,7 +138,7 @@ export default function TimetablePage() {
           text,
           classes: classes.map(c => ({ id: c.id, name: c.name, grade: c.grade })),
           subjects: subjects.map(s => ({ id: s.id, name: s.name })),
-          teachers: teachers.map(t => ({ id: t.id, name: t.display_name })),
+          teachers: activeTeachers.map(t => ({ id: t.id, name: t.display_name })),
           dayLabels: dl,
           periods: school.periods_per_day,
         }),
@@ -160,7 +162,7 @@ export default function TimetablePage() {
     if (!user || parsedEntries.length === 0) return
     setApplying(true)
     const rows = parsedEntries
-      .filter(e => e.class_id && e.teacher_id)
+      .filter(e => e.class_id && activeTeachers.some(t => t.id === e.teacher_id))
       .map(e => ({
         school_id: user.school_id,
         day_number: e.day_number,
@@ -324,7 +326,7 @@ export default function TimetablePage() {
               <label className="text-xs font-medium text-slate-500 mb-1 block">Teacher</label>
               <select value={form.teacher_id} onChange={e => setForm({ ...form, teacher_id: e.target.value })} className="w-full h-10 px-3 rounded-md border text-sm bg-white">
                 <option value="">Select teacher...</option>
-                {teachers.map(t => <option key={t.id} value={t.id}>{t.display_name}</option>)}
+                {activeTeachers.map(t => <option key={t.id} value={t.id}>{t.display_name}</option>)}
               </select>
             </div>
             <Button onClick={addEntry} disabled={saving || !form.class_id || !form.teacher_id} className="w-full" style={{ background: '#2563EB' }}>

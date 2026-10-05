@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
+import { insertGeneratedAbsences } from '../lib/attendance'
 import { DATA_TABLES } from '../lib/data-tables'
 
 const base = process.env.EDUTRACK_TEST_URL
@@ -129,6 +130,10 @@ test('real Auth, RLS, school relationships, gateway, storage and account lifecyc
     assert.equal(remark.status,204)
     // A teacher cannot take over a register now marked by management.
     assert.ok((await rawTeacher.from('attendance').upsert({...attendance,status:'late'}, {onConflict:'student_id,class_id,date,period'})).error)
+    await insertGeneratedAbsences(rawTeacher, [{...attendance,status:'absent'}])
+    const retainedMark = await rawTeacher.from('attendance').select('status,marked_by').eq('student_id',studentIds[0]).single()
+    assert.ifError(retainedMark.error)
+    assert.deepEqual(retainedMark.data,{status:'present',marked_by:authIds[0]})
     const notification = {user_id:teacherProfile.id,type:'merit',title:'Good work',message:'Test',school_id:schools[0]}
     assert.equal((await teacher.request('/api/data/rest/v1/notifications',notification)).status,201)
     assert.equal((await teacher.request('/api/data/rest/v1/notifications?user_id=eq.'+teacherProfile.id,{read:true},'PATCH')).status,204)

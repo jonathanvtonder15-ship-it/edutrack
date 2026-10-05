@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -8,8 +8,13 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { GraduationCap, Loader2, AlertCircle, School, Users, ClipboardCheck } from 'lucide-react'
 
+const subscribeHydration = () => () => {}
+
 export default function LoginPage() {
+  const mounted = useSyncExternalStore(subscribeHydration, () => true, () => false)
   const router = useRouter()
+  const logoutWarning = useAppStore(s => s.logoutWarning)
+  const logout = useAppStore(s => s.logout)
   const setUser = useAppStore((s) => s.setUser)
   const [mode, setMode] = useState<'login' | 'setup'>('login')
   const [loading, setLoading] = useState(false)
@@ -67,6 +72,7 @@ export default function LoginPage() {
             <CardDescription className="text-slate-500">{mode === 'login' ? 'Sign in to your account' : 'Create your school and admin account'}</CardDescription>
           </CardHeader>
           <CardContent>
+            {mounted && logoutWarning && <div role="alert" className="p-3 mb-4 rounded-lg text-sm bg-amber-50 text-amber-900">{logoutWarning} <button type="button" onClick={logout} className="font-semibold underline">Retry sign out</button></div>}
             {error && <div className="flex items-center gap-2 p-3 mb-4 rounded-lg text-sm" style={{ background: '#FEF2F2', color: '#DC2626' }}><AlertCircle className="w-4 h-4 flex-shrink-0" />{error}</div>}
             {mode === 'login' ? (
               <form onSubmit={handleLogin} className="space-y-4">

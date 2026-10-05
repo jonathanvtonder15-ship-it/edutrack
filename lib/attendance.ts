@@ -20,3 +20,18 @@ export async function saveAttendance(client: SupabaseClient, records: Attendance
   })
   if (error) throw new Error(error.message)
 }
+
+export interface OfflineAttendanceBatch { records: AttendanceRecord[] }
+
+export function canSyncAttendance(batch: OfflineAttendanceBatch, user: { school_id: string; id: string }) {
+  return batch.records.length > 0 && batch.records.every(record => record.school_id === user.school_id && record.marked_by === user.id)
+}
+
+// A concurrent teacher's mark always wins over a generated absence.
+export async function insertGeneratedAbsences(client: SupabaseClient, records: AttendanceRecord[]) {
+  if (!records.length) return
+  const { error } = await client.from('attendance').upsert(records, {
+    onConflict: 'student_id,class_id,date,period', ignoreDuplicates: true,
+  })
+  if (error) throw new Error(error.message)
+}
