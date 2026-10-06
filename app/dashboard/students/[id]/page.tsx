@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 import { useLoadEffect } from '@/hooks/use-load-effect'
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -158,7 +160,7 @@ export default function StudentProfilePage() {
           <div className="flex items-start gap-6">
             <div className="relative flex-shrink-0">
               {student.photo_url
-                ? <img src={student.photo_url} alt="" className="w-24 h-24 rounded-2xl object-cover cursor-pointer hover:ring-2 hover:ring-blue-500" onClick={() => setBigPhoto(true)} />
+                ? <Image unoptimized width={96} height={96} src={student.photo_url} alt="" className="w-24 h-24 rounded-2xl object-cover cursor-pointer hover:ring-2 hover:ring-blue-500" onClick={() => setBigPhoto(true)} />
                 : <div className="w-24 h-24 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 text-2xl font-bold">{student.name.charAt(0)}{student.surname.charAt(0)}</div>
               }
               {canEdit && <button onClick={() => setPhotoOpen(true)} className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-lg"><Camera className="w-4 h-4" /></button>}
@@ -322,7 +324,7 @@ export default function StudentProfilePage() {
         <Dialog open={bigPhoto} onOpenChange={() => setBigPhoto(false)}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>{student.surname}, {student.name}</DialogTitle></DialogHeader>
-            <img src={student.photo_url} alt="" className="w-full max-h-[400px] object-contain rounded-lg" />
+            <Image unoptimized width={800} height={800} src={student.photo_url} alt="" className="w-full max-h-[400px] object-contain rounded-lg" />
           </DialogContent>
         </Dialog>
       )}

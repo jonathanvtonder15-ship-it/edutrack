@@ -1,5 +1,9 @@
 'use client'
 
+import { escapeHtml } from '@/lib/html'
+
+import Image from 'next/image'
+
 import { useLoadEffect } from '@/hooks/use-load-effect'
 import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -17,7 +21,7 @@ const BREAK1 = '__break1__'
 const BREAK2 = '__break2__'
 function fmt(d: string) { const x = new Date(d + 'T00:00'); return isNaN(x.getTime()) ? d : x.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) }
 function fmtShort(d: string) { const x = new Date(d + 'T00:00'); return isNaN(x.getTime()) ? d : x.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short' }) }
-function Avatar({ url, name, size }: { url: string | null; name: string; size?: 'sm' }) { const cls = 'w-7 h-7 rounded-full flex-shrink-0'; if (url) return <img src={url} alt="" className={cls + ' object-cover'} />; return <div className={cls + ' bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500'}>{(name || '?').charAt(0)}</div> }
+function Avatar({ url, name }: { url: string | null; name: string; size?: 'sm' }) { const cls = 'w-7 h-7 rounded-full flex-shrink-0'; if (url) return <Image unoptimized width={28} height={28} src={url} alt="" className={cls + ' object-cover'} />; return <div className={cls + ' bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500'}>{(name || '?').charAt(0)}</div> }
 interface LearnerSummary { name: string; register_class: string | null; activities: string[]; total_breaks: number; met: string }
 
 function getWeekdaysInRange(from: string, to: string): string[] {
@@ -158,7 +162,7 @@ export default function CommunityServicePage() {
     const dates = getWeekdaysInRange(regDateFrom, regDateTo)
     const students = regStudents
     const tick = '&#10003;'
-    const img = (p: string | null) => p ? '<img src="' + p + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">' : ''
+    const img = (p: string | null) => p ? '<img src="' + escapeHtml(p) + '" style="width:20px;height:20px;border-radius:50%;object-fit:cover;vertical-align:middle;margin-right:6px">' : ''
     const dateHeaders = dates.map(d => '<th colspan="2" style="text-align:center;background:#e2e8f0;">' + fmtShort(d) + '</th>').join('')
     const breakHeaders = dates.map(() => '<th class="c">1st</th><th class="c">2nd</th>').join('')
     const body = students.map(st => {
@@ -166,10 +170,10 @@ export default function CommunityServicePage() {
         const k1 = st.id + '|' + d + '|1st'; const k2 = st.id + '|' + d + '|2nd'
         return '<td class="c">' + (checklistCells.has(k1) ? tick : '') + '</td><td class="c">' + (checklistCells.has(k2) ? tick : '') + '</td>'
       }).join('')
-      return '<tr><td>' + img(st.photo_url) + st.surname + ', ' + st.name + '</td><td>' + (st.register_class || '') + '</td>' + cells + '</tr>'
+      return '<tr><td>' + img(st.photo_url) + escapeHtml(st.surname) + ', ' + escapeHtml(st.name) + '</td><td>' + escapeHtml(st.register_class || '') + '</td>' + cells + '</tr>'
     }).join('')
     const range = period.start_date && period.end_date ? ' &middot; ' + fmt(period.start_date) + ' to ' + fmt(period.end_date) : ''
-    const html = '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Community Service Register</title><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:12px;color:#0f172a}h1{font-size:18px;margin:0 0 2px}h2{font-size:12px;color:#555;margin:0 0 12px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}.hint{font-size:12px;color:#888}.pb{background:#16a34a;color:#fff;border:0;padding:9px 16px;border-radius:8px;font-size:14px;cursor:pointer}.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #cbd5e1;background:#fff}table{border-collapse:collapse;width:100%;min-width:640px;font-size:12px}th,td{border:1px solid #334155;padding:6px 8px;text-align:left;white-space:nowrap}thead th{background:#f1f5f9}th:first-child,td:first-child{position:sticky;left:0;background:#fff;z-index:1;border-right:2px solid #334155;font-weight:600}thead th:first-child{z-index:2;background:#e2e8f0}.c{text-align:center}@media print{body{padding:0}.toolbar{display:none}.scroll{overflow:visible;border:none}table{min-width:0;font-size:9px}th,td{padding:3px 4px}th:first-child,td:first-child{position:static}@page{size:A4 landscape;margin:8mm}}</style></head><body><h1>Community Service Register</h1><h2>' + (regClass ? 'Class: ' + regClass + ' &middot; ' : '') + (user?.school_name || '') + range + '</h2><div class="toolbar"><span class="hint">Swipe sideways to see all dates</span><button class="pb" onclick="window.print()">Print / Save PDF</button></div><div class="scroll"><table><thead><tr><th rowspan="2">Name</th><th rowspan="2">Class</th>' + dateHeaders + '</tr><tr>' + breakHeaders + '</tr></thead><tbody>' + body + '</tbody></table></div></body></html>'
+    const html = '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"><title>Community Service Register</title><style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:12px;color:#0f172a}h1{font-size:18px;margin:0 0 2px}h2{font-size:12px;color:#555;margin:0 0 12px}.toolbar{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}.hint{font-size:12px;color:#888}.pb{background:#16a34a;color:#fff;border:0;padding:9px 16px;border-radius:8px;font-size:14px;cursor:pointer}.scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid #cbd5e1;background:#fff}table{border-collapse:collapse;width:100%;min-width:640px;font-size:12px}th,td{border:1px solid #334155;padding:6px 8px;text-align:left;white-space:nowrap}thead th{background:#f1f5f9}th:first-child,td:first-child{position:sticky;left:0;background:#fff;z-index:1;border-right:2px solid #334155;font-weight:600}thead th:first-child{z-index:2;background:#e2e8f0}.c{text-align:center}@media print{body{padding:0}.toolbar{display:none}.scroll{overflow:visible;border:none}table{min-width:0;font-size:9px}th,td{padding:3px 4px}th:first-child,td:first-child{position:static}@page{size:A4 landscape;margin:8mm}}</style></head><body><h1>Community Service Register</h1><h2>' + (regClass ? 'Class: ' + escapeHtml(regClass) + ' &middot; ' : '') + escapeHtml(user?.school_name || '') + range + '</h2><div class="toolbar"><span class="hint">Swipe sideways to see all dates</span><button class="pb" onclick="window.print()">Print / Save PDF</button></div><div class="scroll"><table><thead><tr><th rowspan="2">Name</th><th rowspan="2">Class</th>' + dateHeaders + '</tr><tr>' + breakHeaders + '</tr></thead><tbody>' + body + '</tbody></table></div></body></html>'
     const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close() }
     setExportOpen(false)
   }

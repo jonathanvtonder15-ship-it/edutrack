@@ -1,5 +1,9 @@
 'use client'
 
+import { escapeHtml } from '@/lib/html'
+
+import Image from 'next/image'
+
 import { useLoadEffect } from '@/hooks/use-load-effect'
 import { useCallback, useMemo, useState } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -21,7 +25,7 @@ type GradeVal = number | 'all'
 function fmt(d: string) { const x = new Date(d + 'T00:00'); return isNaN(x.getTime()) ? d : x.toLocaleDateString('en-ZA', { day: 'numeric', month: 'short', year: 'numeric' }) }
 function todayISO() { return new Date().toISOString().split('T')[0] }
 function gradeFromRegisterClass(rc: string | null | undefined): number | null { if (!rc) return null; const m = rc.trim().match(/^(\d{1,2})/); return m ? parseInt(m[1]) : null }
-function Avatar({ url, name }: { url: string | null; name: string }) { if (url) return <img src={url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />; return <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">{name.charAt(0)}</div> }
+function Avatar({ url, name }: { url: string | null; name: string }) { if (url) return <Image unoptimized width={32} height={32} src={url} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />; return <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500 flex-shrink-0">{name.charAt(0)}</div> }
 function GradeSelect({ value, onChange, grades }: { value: GradeVal; onChange: (g: GradeVal) => void; grades: number[] }) { return <select value={String(value)} onChange={e => onChange(e.target.value === 'all' ? 'all' : parseInt(e.target.value))} className="h-10 px-3 rounded-md border text-sm bg-white"><option value="all">All grades</option>{grades.map(g => <option key={g} value={g}>Gr {g}</option>)}</select> }
 
 export default function MonitorsPage() {
@@ -196,7 +200,7 @@ export default function MonitorsPage() {
 
   function exportDuty() { const hs = ['Name', 'Grade', 'Date', '1st Break', '2nd Break']; const rows = filteredDutyMonitors.map(mn => [mn.name, mn.grade != null ? 'Gr ' + mn.grade : '', dutyDate, duty[mn.id]?.b1 ? 'Yes' : '', duty[mn.id]?.b2 ? 'Yes' : '']); exportCSV('on-duty-' + dutyDate + '.csv', hs, rows) }
 
-  function printDuty() { const rows = filteredDutyMonitors.map(mn => '<tr><td>' + mn.name + '</td><td>' + dutyDate + '</td><td class="cell"></td><td class="cell"></td></tr>').join(''); const html = '<!DOCTYPE html><html><head><title>On-Duty Register</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #333;padding:8px;text-align:left}.cell{width:60px;text-align:center}th{background:#f1f5f9}</style></head><body><h1>On-Duty Register</h1><h2>Date: ' + dutyDate + '</h2><table><thead><tr><th>Name</th><th>Date</th><th>1st Break</th><th>2nd Break</th></tr></thead><tbody>' + rows + '</tbody></table></body></html>'; const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); w.setTimeout(() => w.print(), 400) } }
+  function printDuty() { const rows = filteredDutyMonitors.map(mn => '<tr><td>' + escapeHtml(mn.name) + '</td><td>' + escapeHtml(dutyDate) + '</td><td class="cell"></td><td class="cell"></td></tr>').join(''); const html = '<!DOCTYPE html><html><head><title>On-Duty Register</title><style>body{font-family:Arial;padding:24px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #333;padding:8px;text-align:left}.cell{width:60px;text-align:center}th{background:#f1f5f9}</style></head><body><h1>On-Duty Register</h1><h2>Date: ' + escapeHtml(dutyDate) + '</h2><table><thead><tr><th>Name</th><th>Date</th><th>1st Break</th><th>2nd Break</th></tr></thead><tbody>' + rows + '</tbody></table></body></html>'; const w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); w.setTimeout(() => w.print(), 400) } }
 
   const grades = useMemo(() => { const set = new Set<number>(); for (const s of students) { const g = s.grade ?? gradeFromRegisterClass(s.register_class); if (g != null) set.add(g) }; for (const m of monitors) { if (m.grade != null) set.add(m.grade) }; return [...set].sort((a, b) => a - b) }, [students, monitors])
   const studentGrade = (s: Student) => s.grade ?? gradeFromRegisterClass(s.register_class)

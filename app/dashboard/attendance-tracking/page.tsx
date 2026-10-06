@@ -97,7 +97,6 @@ export default function AttendanceTrackingPage() {
   const overallRate = totals.total > 0 ? Math.round(((totals.present + totals.sport) / totals.total) * 100) : 0
 
   // Bar chart values for daily trend (rate %)
-  const maxRate = 100
   const showTrend = dailyTrend.length > 0
 
   useLoadEffect(loadClasses)

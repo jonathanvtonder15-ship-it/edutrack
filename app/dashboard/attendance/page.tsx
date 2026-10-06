@@ -1,5 +1,9 @@
 'use client'
 
+import { escapeHtml } from '@/lib/html'
+
+import Image from 'next/image'
+
 import { useLoadEffect } from '@/hooks/use-load-effect'
 import { useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -107,8 +111,6 @@ export default function AttendancePage() {
 
   function markAll(){setStudents(students.map(s=>({...s,status:s.status||'present'})));setSaved(false)}
 
-  function firstUnmarked(){ const idx = students.findIndex(s=>!s.status); return idx >= 0 ? idx : 0 }
-
   async function saveAtt(){
     if(!user)return
     setSaving(true); setSaved(false); setSaveError('')
@@ -161,9 +163,9 @@ export default function AttendancePage() {
   function doPrintBlank(){
     const cls = ac.find(c=>c.id===sc)
     const nameHeader = '<th style="width:200px">Name</th>'
-    const extraHeaders = Array.from({length:printCols},(_,i)=>`<th style="width:90px">Col ${i+1}</th>`).join('')
-    const rows = students.map(s=>`<tr><td>${s.surname}, ${s.name}</td>${Array.from({length:printCols},()=>'<td></td>').join('')}</tr>`).join('')
-    const html = `<!DOCTYPE html><html><head><title>Blank Register — ${cls?.name||'Class'}</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{font-size:18px;margin:0}h2{font-size:14px;color:#555;margin:4px 0 16px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #333;padding:8px;text-align:left}th{background:#f1f5f9;text-align:center}.num{width:28px}@media print{@page{margin:1cm}}</style></head><body><h1>${cls?.name||'Class'} — Blank Register</h1><h2>Date: ${printDate} · ${students.length} learners · ${printCols} extra blank columns</h2><table><thead><tr><th class="num">#</th>${nameHeader}${extraHeaders}</tr></thead><tbody>${rows.split('</tr>').map((r,i)=>r+'</tr>').join('')}</tbody></table></body></html>`
+    const extraHeaders = Array.from({length:printCols},(_,i)=>`<th style="width:90px">Col ${escapeHtml(i+1)}</th>`).join('')
+    const rows = students.map((s,i)=>`<tr><td>${escapeHtml(i+1)}</td><td>${escapeHtml(s.surname)}, ${escapeHtml(s.name)}</td>${Array.from({length:printCols},()=>'<td></td>').join('')}</tr>`).join('')
+    const html = `<!DOCTYPE html><html><head><title>Blank Register — ${escapeHtml(cls?.name||'Class')}</title><style>body{font-family:Arial,sans-serif;padding:24px}h1{font-size:18px;margin:0}h2{font-size:14px;color:#555;margin:4px 0 16px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border:1px solid #333;padding:8px;text-align:left}th{background:#f1f5f9;text-align:center}.num{width:28px}@media print{@page{margin:1cm}}</style></head><body><h1>${escapeHtml(cls?.name||'Class')} — Blank Register</h1><h2>Date: ${escapeHtml(printDate)} · ${escapeHtml(students.length)} learners · ${escapeHtml(printCols)} extra blank columns</h2><table><thead><tr><th class="num">#</th>${nameHeader}${extraHeaders}</tr></thead><tbody>${rows}</tbody></table></body></html>`
     const w = window.open('','_blank')
     if(w){ w.document.write(html); w.document.close(); w.setTimeout(()=>w.print(),400) }
     setPrintOpen(false)
@@ -236,7 +238,7 @@ export default function AttendancePage() {
               const isFocused = i===focusIdx&&!s.status
               return <div key={s.student_id} className={`flex items-center justify-between p-3 rounded-lg ${s.status==='present'?'bg-green-50':s.status==='absent'?'bg-red-50':s.status==='late'?'bg-yellow-50':s.status==='sport'?'bg-blue-50':`bg-amber-50 border ${isFocused?'border-blue-400 border-2':'border-amber-200'}`}`}>
                 <div className="flex items-center gap-3">
-                  {s.photo_url?<img src={s.photo_url} alt="" className="w-8 h-8 rounded-full object-cover" />:<div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">{s.name.charAt(0)}{s.surname.charAt(0)}</div>}
+                  {s.photo_url?<Image unoptimized width={32} height={32} src={s.photo_url} alt="" className="w-8 h-8 rounded-full object-cover" />:<div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-500">{s.name.charAt(0)}{s.surname.charAt(0)}</div>}
                   <div><span className="font-medium text-slate-800 text-sm">{s.surname}, {s.name}</span>{!s.status&&<span className="ml-2 text-xs text-amber-600 font-medium">not marked</span>}{s.note&&<span className="block text-xs text-slate-500 italic mt-0.5">Note: {s.note}</span>}</div>
                 </div>
                 <div className="flex gap-1.5">

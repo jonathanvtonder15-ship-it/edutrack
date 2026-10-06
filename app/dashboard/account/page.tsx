@@ -8,7 +8,7 @@ import { Loader2, User, Lock } from 'lucide-react'
 
 export default function AccountPage() {
   const user = useAppStore(s => s.user)
-  const setUser = useAppStore(s => s.setUser)
+  const updateDisplayName = useAppStore(s => s.updateDisplayName)
   const [name, setName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [nameMsg, setNameMsg] = useState('')
@@ -28,7 +28,7 @@ export default function AccountPage() {
       const res = await fetch('/api/auth/account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ display_name: name.trim() }) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
-      setUser({ ...user, display_name: name.trim() }); setNameMsg('Name updated.')
+      updateDisplayName(user.id, name.trim()); setNameMsg('Name updated.')
     } catch (error) { setNameMsg(error instanceof Error ? error.message : 'Could not update name.') }
     finally { setSavingName(false) }
   }

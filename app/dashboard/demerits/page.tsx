@@ -1,5 +1,7 @@
 'use client'
 
+import { escapeHtml } from '@/lib/html'
+
 import { useLoadEffect } from '@/hooks/use-load-effect'
 import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
@@ -143,7 +145,7 @@ export default function DemeritsPage() {
 
   function toggleStudent(id: string) {
     const n = new Set(selectedStudents)
-    n.has(id) ? n.delete(id) : n.add(id)
+    if (n.has(id)) { n.delete(id) } else { n.add(id) }
     setSelectedStudents(n)
   }
 
@@ -171,12 +173,12 @@ export default function DemeritsPage() {
       byTeacher.get(key)!.push(d)
     })
     const teacherSections = Array.from(byTeacher.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([teacher, recs]) => {
-      const rows = recs.map(d => `<tr><td>${d.date}</td><td>${d.student_name}</td><td>${d.grade ? 'Gr ' + d.grade : '-'}</td><td>${d.register_class || '-'}</td><td>${d.type_name}</td><td>${d.points}</td><td>${d.notes || '-'}</td></tr>`).join('')
-      return `<div class="teacher-page"><h2>${teacher} <span class="sub">(${recs.length} demerits, ${recs.reduce((s, d) => s + d.points, 0)} pts)</span></h2><table><thead><tr><th>Date</th><th>Student</th><th>Grade</th><th>Register Class</th><th>Type</th><th>Points</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      const rows = recs.map(d => `<tr><td>${escapeHtml(d.date)}</td><td>${escapeHtml(d.student_name)}</td><td>${escapeHtml(d.grade ? 'Gr ' + d.grade : '-')}</td><td>${escapeHtml(d.register_class || '-')}</td><td>${escapeHtml(d.type_name)}</td><td>${escapeHtml(d.points)}</td><td>${escapeHtml(d.notes || '-')}</td></tr>`).join('')
+      return `<div class="teacher-page"><h2>${escapeHtml(teacher)} <span class="sub">(${escapeHtml(recs.length)} demerits, ${escapeHtml(recs.reduce((s, d) => s + d.points, 0))} pts)</span></h2><table><thead><tr><th>Date</th><th>Student</th><th>Grade</th><th>Register Class</th><th>Type</th><th>Points</th><th>Notes</th></tr></thead><tbody>${rows}</tbody></table></div>`
     }).join('')
     const rangeLabel = dateFrom && dateTo ? `${dateFrom} to ${dateTo}` : dateFrom ? `from ${dateFrom}` : dateTo ? `up to ${dateTo}` : 'all dates'
     const teacherLabel = filterTeacher ? ` — Teacher: ${filterTeacher}` : ''
-    const html = `<!DOCTYPE html><html><head><title>Demerit Report</title><style>body{font-family:Arial;padding:20px}h1{font-size:20px}h2{font-size:16px;margin-top:24px;border-bottom:2px solid #333;padding-bottom:6px}.sub{font-size:12px;color:#666;font-weight:normal}table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.teacher-page{page-break-after:always}.teacher-page:last-child{page-break-after:auto}@media print{.teacher-page{page-break-after:always}}</style></head><body><h1>Demerit Report</h1><p>${user?.school_name || ''} | ${fd.length} records | ${fd.reduce((s, d) => s + d.points, 0)} total points | ${rangeLabel}${teacherLabel}</p>${teacherSections}</body></html>`
+    const html = `<!DOCTYPE html><html><head><title>Demerit Report</title><style>body{font-family:Arial;padding:20px}h1{font-size:20px}h2{font-size:16px;margin-top:24px;border-bottom:2px solid #333;padding-bottom:6px}.sub{font-size:12px;color:#666;font-weight:normal}table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px}th,td{border:1px solid #ddd;padding:8px;text-align:left}th{background:#f5f5f5}.teacher-page{page-break-after:always}.teacher-page:last-child{page-break-after:auto}@media print{.teacher-page{page-break-after:always}}</style></head><body><h1>Demerit Report</h1><p>${escapeHtml(user?.school_name || '')} | ${escapeHtml(fd.length)} records | ${escapeHtml(fd.reduce((s, d) => s + d.points, 0))} total points | ${escapeHtml(rangeLabel)}${escapeHtml(teacherLabel)}</p>${teacherSections}</body></html>`
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close(); w.setTimeout(() => w.print(), 500) }
   }
@@ -222,7 +224,7 @@ export default function DemeritsPage() {
                     {demeritTypes.map(dt => {
                       const on = selectedTypes.has(dt.id)
                       return (
-                      <button key={dt.id} onClick={() => { const n = new Set(selectedTypes); on ? n.delete(dt.id) : n.add(dt.id); setSelectedTypes(n) }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${on ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-slate-200 bg-white text-slate-600 hover:border-yellow-300'}`}>
+                      <button key={dt.id} onClick={() => { const n = new Set(selectedTypes); if (on) { n.delete(dt.id) } else { n.add(dt.id) } setSelectedTypes(n) }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all ${on ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-slate-200 bg-white text-slate-600 hover:border-yellow-300'}`}>
                         {dt.name} <span className="opacity-60">({dt.points}pts)</span>
                       </button>
                       )
@@ -362,9 +364,9 @@ export default function DemeritsPage() {
         <DialogContent><DialogHeader><DialogTitle>Give Demerit — Individual</DialogTitle></DialogHeader>
           <div className="space-y-3 pt-2">
             <Input placeholder="Search learner..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} />
-            {studentSearch && <div className="max-h-40 overflow-y-auto border rounded-md">{fs.slice(0, 10).map(s => { const sel=indivSelected.has(s.id); return <button key={s.id} onClick={() => { const n=new Set(indivSelected); sel?n.delete(s.id):n.add(s.id); setIndivSelected(n); setStudentSearch('') }} className={`w-full text-left px-3 py-2 text-sm border-b ${sel?'bg-yellow-50':''}`}><span className="font-medium">{s.surname}, {s.name}</span>{sel&&<span className="ml-2 text-yellow-600 text-xs">\u2713 selected</span>}</button> })}</div>}
+            {studentSearch && <div className="max-h-40 overflow-y-auto border rounded-md">{fs.slice(0, 10).map(s => { const sel=indivSelected.has(s.id); return <button key={s.id} onClick={() => { const n=new Set(indivSelected); if (sel) { n.delete(s.id) } else { n.add(s.id) } setIndivSelected(n); setStudentSearch('') }} className={`w-full text-left px-3 py-2 text-sm border-b ${sel?'bg-yellow-50':''}`}><span className="font-medium">{s.surname}, {s.name}</span>{sel&&<span className="ml-2 text-yellow-600 text-xs">\u2713 selected</span>}</button> })}</div>}
             {indivSelected.size > 0 && <div className="max-h-40 overflow-y-auto border rounded-md">{Array.from(indivSelected).map(sid => { const s=allStudents.find(st=>st.id===sid); return <div key={sid} className="flex items-center justify-between px-3 py-2 text-sm border-b bg-orange-50"><span className="font-medium">{s?`${s.surname}, ${s.name}`:sid}</span><button onClick={()=>{const n=new Set(indivSelected);n.delete(sid);setIndivSelected(n)}} className="text-red-400 text-xs">remove</button></div> })}</div>}
-            <div className="flex flex-wrap gap-2">{demeritTypes.map(dt => { const on = singleTypes.has(dt.id); return <button key={dt.id} onClick={() => { const n = new Set(singleTypes); on ? n.delete(dt.id) : n.add(dt.id); setSingleTypes(n) }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 ${on ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-slate-200 bg-white text-slate-600'}`}>{dt.name} ({dt.points}pts)</button> })}</div>
+            <div className="flex flex-wrap gap-2">{demeritTypes.map(dt => { const on = singleTypes.has(dt.id); return <button key={dt.id} onClick={() => { const n = new Set(singleTypes); if (on) { n.delete(dt.id) } else { n.add(dt.id) } setSingleTypes(n) }} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 ${on ? 'border-yellow-500 bg-yellow-50 text-yellow-700' : 'border-slate-200 bg-white text-slate-600'}`}>{dt.name} ({dt.points}pts)</button> })}</div>
             <Input placeholder="Notes (optional)" value={singleNotes} onChange={e => setSingleNotes(e.target.value)} />
             <Button onClick={giveIndividualDemerit} disabled={giving || !indivSelected.size || !singleTypes.size} className="w-full" style={{ background: '#F59E0B' }}>{giving ? <Loader2 className="w-4 h-4 animate-spin" /> : `Give Demerit to ${indivSelected.size} learner${indivSelected.size !== 1 ? 's' : ''}${singleTypes.size > 1 ? ` (${singleTypes.size} types)` : ''}`}</Button>
             <Button variant="outline" onClick={() => { setGiveOpen(false); setIndivSelected(new Set()); setStudentSearch('') }} className="w-full">Cancel</Button>

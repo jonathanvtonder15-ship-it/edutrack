@@ -24,6 +24,16 @@ test('logout clears local state immediately and reports HTTP and network failure
   t.after(()=>{Reflect.deleteProperty(globalThis,'localStorage');Reflect.deleteProperty(globalThis,'window')})
   const { useAppStore } = await import('../lib/store')
   const user = {id:'teacher',username:'teacher',display_name:'Teacher',role:'teacher',school_id:'school',school_name:'School'}
+  useAppStore.setState({ user, loginTime: 12345, keepSignedIn: true })
+  useAppStore.getState().updateDisplayName(user.id, 'Updated name')
+  assert.equal(useAppStore.getState().user?.display_name, 'Updated name')
+  assert.equal(useAppStore.getState().loginTime, 12345, 'profile edits must not renew the session')
+  assert.equal(useAppStore.getState().keepSignedIn, true)
+  useAppStore.getState().updateDisplayName('another-user', 'Stale name')
+  assert.equal(useAppStore.getState().user?.display_name, 'Updated name')
+  useAppStore.setState({ user: null })
+  useAppStore.getState().updateDisplayName(user.id, 'Late response')
+  assert.equal(useAppStore.getState().user, null, 'a late profile response must not undo logout')
   for (const failure of ['http','network','success']) {
     let complete!: (value: Response) => void
     let reject!: (reason: Error) => void

@@ -19,6 +19,7 @@ interface AppState {
   loginTime: number | null
   keepSignedIn: boolean
   setUser: (user: UserSession | null, keepSignedIn?: boolean) => void
+  updateDisplayName: (userId: string, displayName: string) => void
   logout: () => void
   isSessionValid: () => boolean
   hasRole: (role: string) => boolean
@@ -36,6 +37,9 @@ export const useAppStore = create<AppState>()(
       loginTime: null,
       keepSignedIn: false,
       setUser: (user, keepSignedIn = get().keepSignedIn) => set({ user, logoutWarning: null, loginTime: user ? Date.now() : null, keepSignedIn }),
+      updateDisplayName: (userId, displayName) => set(state => state.user?.id === userId
+        ? { user: { ...state.user, display_name: displayName } }
+        : {}),
       logout: () => {
         set({ user: null, loginTime: null, keepSignedIn: false, logoutWarning: null })
         void (async () => {

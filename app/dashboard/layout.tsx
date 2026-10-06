@@ -1,4 +1,6 @@
 'use client'
+
+import Image from 'next/image'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
@@ -53,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const age = Date.now() - new Date(ann.created_at).getTime()
         if (age < 5 * 60 * 1000) setBanner({ id: ann.id, title: ann.title, message: ann.message, created_at: ann.created_at })
       }
-    } catch(e) {}
+    } catch {}
   }, [user])
 
   async function markAllRead() {
@@ -112,7 +114,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className={`fixed lg:relative z-50 h-full flex flex-col transition-all duration-300 ${collapsed?'w-[68px]':'w-64'} ${mobileOpen?'translate-x-0':'-translate-x-full lg:translate-x-0'}`} style={{background:'#1E293B'}}>
         <div className="flex items-center gap-3 px-4 h-16 border-b border-slate-700">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" /> : <GraduationCap className="w-5 h-5 text-white" />}
+            {logoUrl ? <Image unoptimized width={36} height={36} src={logoUrl} alt="" className="w-full h-full object-contain" /> : <GraduationCap className="w-5 h-5 text-white" />}
           </div>
           {!collapsed && <span className="text-white font-bold text-lg">EduTrack</span>}
           <button onClick={() => setMobileOpen(false)} className="ml-auto lg:hidden text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
