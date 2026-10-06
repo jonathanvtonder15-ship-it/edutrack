@@ -1,21 +1,48 @@
+import { timingSafeEqual, randomUUID } from 'node:crypto'
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
-import bcrypt from 'bcryptjs'
+import { z } from 'zod'
+import { getServiceSupabase } from '@/lib/supabase-server'
+import { authEmail, getAuthenticatedSupabase } from '@/lib/supabase-auth'
+import { nameSchema, passwordSchema, usernameSchema } from '@/lib/auth-input'
+import { setSession, sessionSecret, checkRequestOrigin } from '@/lib/session'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mkfixnivoyqghvmrsloj.supabase.co'
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1rZml4bml2b3lxZ2h2bXJzbG9qIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NjU2MjExNywiZXhwIjoyMDkyMTM4MTE3fQ.wZVOtCUdzqDxCWSOhAELjuZDQD1PdPRRREFtjAjQ5QE'
+const setupSchema = z.object({
+  setup_code: z.string(), school_name: nameSchema, admin_username: usernameSchema,
+  admin_password: passwordSchema, admin_display_name: nameSchema,
+  timetable_type: z.enum(['5-day', '10-day']).default('5-day'),
+  periods_per_day: z.number().int().min(1).max(15).default(8),
+})
 
 export async function POST(req: NextRequest) {
+  const originError = checkRequestOrigin(req)
+  if (originError) return originError
   try {
-    const { school_name, admin_username, admin_password, admin_display_name, timetable_type, periods_per_day } = await req.json()
-    if (!school_name || !admin_username || !admin_password || !admin_display_name) return NextResponse.json({ error: 'All fields are required' }, { status: 400 })
-    const supabase = createClient(supabaseUrl, serviceRoleKey)
-    const { data: school, error: schoolError } = await supabase.from('schools').insert({ name: school_name, timetable_type: timetable_type || '5-day', periods_per_day: periods_per_day || 8 }).select().single()
-    if (schoolError) return NextResponse.json({ error: schoolError.message }, { status: 500 })
-    const password_hash = await bcrypt.hash(admin_password, 10)
-    const { data: admin, error: adminError } = await supabase.from('users').insert({ username: admin_username.toLowerCase().trim(), password_hash, display_name: admin_display_name, role: 'admin', school_id: school.id }).select().single()
-    if (adminError) { await supabase.from('schools').delete().eq('id', school.id); return NextResponse.json({ error: adminError.message }, { status: 500 }) }
-    return NextResponse.json({ success: true, school: { id: school.id, name: school.name }, admin: { id: admin.id, username: admin.username, display_name: admin.display_name } })
-  } catch (err) { console.error('Setup error:', err); return NextResponse.json({ error: 'Internal server error' }, { status: 500 }) }
+    const setupToken = process.env.SCHOOL_SETUP_TOKEN
+    if (!setupToken || setupToken.length < 32) return NextResponse.json({ error: 'School setup is disabled. Contact your site administrator.' }, { status: 503 })
+    const parsed = setupSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json({ error: 'Provide all fields, a valid username and a password of at least 8 characters.' }, { status: 400 })
+    const body = parsed.data
+    const supplied = Buffer.from(body.setup_code)
+    const expected = Buffer.from(setupToken)
+    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return NextResponse.json({ error: 'Invalid setup code' }, { status: 403 })
+    sessionSecret()
+    const supabase = getServiceSupabase()
+    const id = randomUUID()
+    const { error: authError } = await supabase.auth.admin.createUser({ id, email: authEmail(id), password: body.admin_password, email_confirm: true })
+    if (authError) return NextResponse.json({ error: 'Could not create administrator account' }, { status: 500 })
+    const { data, error } = await supabase.rpc('bootstrap_school', {
+      admin_id: id, school_name: body.school_name, admin_username: body.admin_username,
+      admin_display_name: body.admin_display_name, timetable: body.timetable_type, periods: body.periods_per_day,
+    })
+    if (error) {
+      await supabase.auth.admin.deleteUser(id)
+      return NextResponse.json({ error: error.code === '23505' ? 'Username already exists' : 'Could not create school. Check the database setup.' }, { status: error.code === '23505' ? 409 : 500 })
+    }
+    const auth = await getAuthenticatedSupabase()
+    const { error: loginError } = await auth.auth.signInWithPassword({ email: authEmail(id), password: body.admin_password })
+    if (loginError) return NextResponse.json({ error: 'School created. Please sign in with your new account.' }, { status: 503 })
+    return setSession(NextResponse.json({ success: true, ...data }), id)
+  } catch {
+    return NextResponse.json({ error: 'Could not set up school' }, { status: 500 })
+  }
 }
-

@@ -1,183 +1,91 @@
-# Custom UI Next.js Base
+# EduTrack
 
-A [Next.js](https://nextjs.org) project template with a comprehensive UI component library built on [shadcn/ui](https://ui.shadcn.com/) and [Radix UI](https://www.radix-ui.com/) primitives.
+School management with attendance, classes, timetables, conduct, community service,
+monitors, announcements and staff accounts. Built with Next.js, React and Supabase.
 
-## Tech Stack
+## Run locally
 
-- **Framework:** Next.js 16.1 with App Router
-- **Language:** TypeScript 5
-- **UI Library:** React 19
-- **Styling:** Tailwind CSS 4 with CSS variables
-- **Components:** shadcn/ui (new-york style) + Radix UI primitives
-- **Icons:** Lucide React
-- **Forms:** React Hook Form + Zod validation
-- **Charts:** Recharts
-- **Animations:** tw-animate-css
-
-## Project Structure
-
-```
-├── app/                    # Next.js App Router directory
-│   ├── favicon.ico         # Site favicon
-│   ├── globals.css         # Global styles & Tailwind CSS configuration
-│   ├── layout.tsx          # Root layout (Geist fonts, metadata)
-│   └── page.tsx            # Home page component
-│
-├── components/             # React components
-│   └── ui/                 # shadcn/ui component library
-│       ├── accordion.tsx       # Expandable content sections
-│       ├── alert-dialog.tsx    # Modal confirmation dialogs
-│       ├── alert.tsx           # Inline alert messages
-│       ├── aspect-ratio.tsx    # Responsive aspect ratio container
-│       ├── avatar.tsx          # User avatar with fallback
-│       ├── badge.tsx           # Status/label badges
-│       ├── breadcrumb.tsx      # Navigation breadcrumbs
-│       ├── button-group.tsx    # Grouped button actions
-│       ├── button.tsx          # Button with variants
-│       ├── calendar.tsx        # Date picker calendar (react-day-picker)
-│       ├── card.tsx            # Card container component
-│       ├── carousel.tsx        # Image/content carousel (embla)
-│       ├── chart.tsx           # Chart components (recharts)
-│       ├── checkbox.tsx        # Checkbox input
-│       ├── collapsible.tsx     # Collapsible content panel
-│       ├── command.tsx         # Command palette (cmdk)
-│       ├── context-menu.tsx    # Right-click context menu
-│       ├── dialog.tsx          # Modal dialog
-│       ├── drawer.tsx          # Slide-out drawer (vaul)
-│       ├── dropdown-menu.tsx   # Dropdown menu
-│       ├── empty.tsx           # Empty state placeholder
-│       ├── field.tsx           # Form field wrapper
-│       ├── form.tsx            # Form components (react-hook-form)
-│       ├── hover-card.tsx      # Hover-triggered card
-│       ├── input-group.tsx     # Input with addons
-│       ├── input-otp.tsx       # OTP input field
-│       ├── input.tsx           # Text input
-│       ├── item.tsx            # List item component
-│       ├── kbd.tsx             # Keyboard shortcut display
-│       ├── label.tsx           # Form label
-│       ├── menubar.tsx         # Application menubar
-│       ├── navigation-menu.tsx # Navigation menu with dropdowns
-│       ├── pagination.tsx      # Page navigation
-│       ├── popover.tsx         # Popover overlay
-│       ├── progress.tsx        # Progress bar
-│       ├── radio-group.tsx     # Radio button group
-│       ├── resizable.tsx       # Resizable panels
-│       ├── scroll-area.tsx     # Custom scrollbar container
-│       ├── select.tsx          # Select dropdown
-│       ├── separator.tsx       # Visual divider
-│       ├── sheet.tsx           # Side sheet overlay
-│       ├── sidebar.tsx         # Sidebar navigation
-│       ├── skeleton.tsx        # Loading skeleton
-│       ├── slider.tsx          # Range slider
-│       ├── sonner.tsx          # Toast notifications (sonner)
-│       ├── spinner.tsx         # Loading spinner
-│       ├── switch.tsx          # Toggle switch
-│       ├── table.tsx           # Data table
-│       ├── tabs.tsx            # Tabbed interface
-│       ├── textarea.tsx        # Multi-line text input
-│       ├── toggle-group.tsx    # Toggle button group
-│       ├── toggle.tsx          # Toggle button
-│       └── tooltip.tsx         # Hover tooltip
-│
-├── hooks/                  # Custom React hooks
-│   └── use-mobile.ts       # Mobile breakpoint detection hook
-│
-├── lib/                    # Utility functions
-│   └── utils.ts            # cn() helper for className merging (clsx + tailwind-merge)
-│
-├── public/                 # Static assets
-│   ├── file.svg
-│   ├── globe.svg
-│   ├── next.svg
-│   ├── vercel.svg
-│   └── window.svg
-│
-├── components.json         # shadcn/ui configuration
-├── eslint.config.mjs       # ESLint configuration
-├── next.config.ts          # Next.js configuration
-├── package.json            # Dependencies and scripts
-├── postcss.config.mjs      # PostCSS configuration
-└── tsconfig.json           # TypeScript configuration
-```
-
-## Key Directories
-
-### `/app`
-The Next.js App Router directory containing pages and layouts. Uses file-based routing where each folder represents a route segment.
-
-- `layout.tsx` - Root layout wrapping all pages, configures Geist fonts (sans & mono)
-- `page.tsx` - Home page at the root route (`/`)
-- `globals.css` - Global styles including Tailwind CSS base, components, and utilities
-
-### `/components/ui`
-A comprehensive library of 50+ pre-built UI components based on shadcn/ui. All components are:
-- Fully typed with TypeScript
-- Styled with Tailwind CSS using CSS variables for theming
-- Built on accessible Radix UI primitives
-- Customizable and composable
-
-### `/hooks`
-Custom React hooks for shared functionality:
-- `useIsMobile()` - Detects mobile viewport (< 768px breakpoint)
-
-### `/lib`
-Utility functions and helpers:
-- `cn()` - Merges Tailwind CSS classes with proper precedence handling
-
-## Getting Started
-
-First, install dependencies:
+Use Node.js 24, npm and Docker. Install the locked dependencies:
 
 ```bash
-npm install
+npm ci
+npx supabase start
 ```
 
-Then, run the development server:
+The CLI creates a local PostgreSQL database and applies `supabase/migrations/`.
+Copy `.env.example` to `.env.local`. Use the URL, anon key and service role key
+from `npx supabase status` for the corresponding Supabase variables. Generate
+**separate** private values for `SESSION_SECRET` and `SCHOOL_SETUP_TOKEN`:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Production builds require `NEXT_PUBLIC_APP_URL`; there is no production localhost fallback.
 
-You can start editing the page by modifying `app/page.tsx`.
+Run `npm run dev` and open <http://localhost:3000>. Choose **Set up here**, enter
+the setup code and create your school administrator. Passwords require at least
+8 characters. Create staff under **Staff**, then classes, students and allocations.
+Remove `SCHOOL_SETUP_TOKEN` and restart when school provisioning is complete.
 
-## Available Scripts
+The optional `OPENAI_API_KEY` enables timetable AI parsing. All other features
+work without it; manual timetable entry remains available.
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server |
-| `npm run build` | Build for production |
-| `npm run start` | Start production server |
-| `npm run lint` | Run ESLint |
+## Deploy
 
-## Adding Components
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the fresh-project setup, environment variables,
+verification and backup requirements. The migration **does not upgrade an existing
+EduTrack database**. Existing school records and legacy password accounts require
+an explicit data and Auth migration before switching to this version.
 
-This project uses shadcn/ui. To add new components:
+## Security model
+
+- Usernames are mapped to internal Supabase Auth identities. Passwords are stored
+  by Auth, never in the public profile table or browser storage.
+- Access and refresh tokens are HTTP-only cookies. A separate signed cookie limits
+  the app session to 12 hours, or one year when “Keep me signed in” is selected.
+- `/api/data` forwards only approved database and photo requests using the verified
+  user's token. It never forwards a service role token. PostgreSQL row-level security
+  applies even when someone calls Supabase directly.
+- Every school record is scoped to the active user's school. Relationship triggers
+  reject foreign-school IDs. Staff profile/role changes use guarded server routes.
+- Teaching staff can read academic records within their school and record attendance,
+  conduct and community service. Attendance edits are limited to its author or
+  management. Admin/SMT manage rosters, allocations and school reference data.
+  Only admins manage accounts, school settings and announcements. Monitor guardians
+  can read the student roster and manage monitor records; they cannot read attendance
+  or conduct records. Preferences belong to their user; notifications are readable
+  only by their recipient. Merit types may be added by teaching staff.
+- Photos are private, restricted to the student's school, limited to 5 MiB and common
+  raster image types. Admin/SMT can upload. Deactivating staff immediately removes
+  database access while preserving attribution on historical records.
+
+School accounts are provisioned by the site operator using a private setup code.
+Password recovery currently uses an administrator reset in Staff; if the only admin
+loses access, the operator must reset that Auth account in Supabase. Internal email
+addresses do not receive mail. Do not enable email invitation/recovery flows without
+first adding real verified email addresses and adapting the username mapping.
+
+## Checks
 
 ```bash
-npx shadcn@latest add [component-name]
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm audit --omit=dev
 ```
 
-Components will be added to `components/ui/` and can be customized directly.
+`npm test` runs unit tests; the real integration suite is opt-in and requires a
+running local app and local Supabase. Export the variables from your private local
+configuration, then run:
 
-## Learn More
+```bash
+EDUTRACK_TEST_URL=http://localhost:3000 npm test
+```
 
-To learn more about the technologies used:
-
-- [Next.js Documentation](https://nextjs.org/docs) - Next.js features and API
-- [shadcn/ui Documentation](https://ui.shadcn.com/) - Component library docs
-- [Radix UI](https://www.radix-ui.com/) - Accessible component primitives
-- [Tailwind CSS](https://tailwindcss.com/docs) - Utility-first CSS framework
-- [React Hook Form](https://react-hook-form.com/) - Form handling
-- [Zod](https://zod.dev/) - Schema validation
-
-## License
-
-This project is private.
+The integration suite refuses remote hosts, creates two synthetic schools, tests
+Auth, access boundaries, relationships, private storage and account lifecycle,
+and cleans up its own rows. It requires `SCHOOL_SETUP_TOKEN`, the Supabase URL,
+anon key and service role key in the test process as well as the app process.
+Do not run destructive local database resets against a database you need to retain.

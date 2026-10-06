@@ -1,11 +1,14 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import Image from 'next/image'
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { GraduationCap, LayoutDashboard, Users, ClipboardCheck, AlertTriangle, DoorOpen, Calendar, UserCog, Settings, School, LogOut, Bell, ChevronLeft, ChevronRight, ChevronDown, ArrowLeftRight, Menu, X, MessageCircle, BookOpen, BarChart3, Award, Scale, Trash2, Megaphone, SlidersHorizontal, Activity, HeartHandshake, UsersRound } from 'lucide-react'
+import { GraduationCap, LayoutDashboard, Users, ClipboardCheck, DoorOpen, Calendar, UserCog, Settings, School, LogOut, Bell, ChevronLeft, ChevronRight, ChevronDown, Menu, X, MessageCircle, BookOpen, BarChart3, Scale, Trash2, Megaphone, SlidersHorizontal, Activity, HeartHandshake, UsersRound } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+const subscribeHydration = () => () => {}
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, group: 'Overview', roles: ['admin','teacher','smt','admin-teacher'] },
   { href: '/dashboard/classes', label: 'Classes', icon: BookOpen, group: 'Teaching', roles: ['admin','smt','admin-teacher'] },
@@ -29,24 +32,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const { user, logout } = useAppStore()
+  const [verifiedId, setVerifiedId] = useState<string | null>(null)
+  const [sessionError, setSessionError] = useState('')
   const [collapsed, setCollapsed] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({})
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(subscribeHydration, () => true, () => false)
   const [logoUrl, setLogoUrl] = useState('')
   const [notifications, setNotifications] = useState<Array<{id:string;title:string;message:string;read:boolean;created_at:string;type?:string}>>([])
   const [notifOpen, setNotifOpen] = useState(false)
   const [banner, setBanner] = useState<{id:string;title:string;message:string;created_at:string}|null>(null)
 
-  useEffect(() => { setMounted(true) }, [])
-
-  useEffect(() => {
-    if (!mounted) return
-    if (!user) { router.push('/'); return }
-    if (!useAppStore.getState().isSessionValid()) { logout(); router.push('/'); return }
-    loadExtra()
-  }, [mounted, user, router])
-  async function loadExtra() {
+  const loadExtra = useCallback(async () => {
     if (!user) return
     try {
       const { data: school } = await supabase.from('schools').select('logo_url').eq('id', user.school_id).single()
@@ -58,8 +55,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         const age = Date.now() - new Date(ann.created_at).getTime()
         if (age < 5 * 60 * 1000) setBanner({ id: ann.id, title: ann.title, message: ann.message, created_at: ann.created_at })
       }
-    } catch(e) {}
-  }
+    } catch {}
+  }, [user])
+
   async function markAllRead() {
     if (!user) return
     await supabase.from('notifications').update({ read: true }).eq('user_id', user.id).eq('read', false)
@@ -69,16 +67,41 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     await supabase.from('notifications').delete().eq('id', id)
     setNotifications(notifications.filter(n => n.id !== id))
   }
-  function dismissBanner() {
-    if (banner) { supabase.from('notifications').update({ read: true }).eq('id', banner.id) }
+  async function dismissBanner() {
+    if (banner) { await supabase.from('notifications').update({ read: true }).eq('id', banner.id) }
     setBanner(null)
   }
+
+  useEffect(() => {
+    if (!mounted) return
+    const stored = useAppStore.getState()
+    if (!stored.user || !stored.isSessionValid()) { logout(); router.replace('/'); return }
+    const controller = new AbortController()
+    void fetch('/api/auth/me', { signal: controller.signal, cache: 'no-store' }).then(async response => {
+      if (response.status === 401) { logout(); router.replace('/'); return }
+      if (!response.ok) throw new Error('Unable to verify your session. Please reload to try again.')
+      const data = await response.json()
+      useAppStore.setState({ user: data.user })
+      setVerifiedId(data.user.id)
+    }).catch(error => { if (!controller.signal.aborted) setSessionError(error.message) })
+    const expired = () => { logout(); router.replace('/') }
+    window.addEventListener('edutrack-session-expired', expired)
+    return () => { controller.abort(); window.removeEventListener('edutrack-session-expired', expired) }
+  }, [mounted, user?.id, router, logout])
+
+  useEffect(() => {
+    if (!verifiedId) return
+    const timer = setTimeout(() => { void loadExtra() }, 0)
+    return () => clearTimeout(timer)
+  }, [verifiedId, loadExtra])
   useEffect(() => {
     if (!banner) return
     const t = setTimeout(() => setBanner(null), 3 * 60 * 1000)
     return () => clearTimeout(t)
   }, [banner])
-  if (!mounted || !user) return null
+
+  if (sessionError) return <div role="alert" className="p-8">{sessionError}</div>
+  if (!mounted || !user || verifiedId !== user.id) return null
   const userRoles = (user?.roles && user.roles.length > 0) ? user.roles : [user.role]
   const filteredNav = navItems.filter(i => i.roles.some(r => userRoles.includes(r)))
   const isActive = (href: string) => pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
@@ -91,7 +114,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className={`fixed lg:relative z-50 h-full flex flex-col transition-all duration-300 ${collapsed?'w-[68px]':'w-64'} ${mobileOpen?'translate-x-0':'-translate-x-full lg:translate-x-0'}`} style={{background:'#1E293B'}}>
         <div className="flex items-center gap-3 px-4 h-16 border-b border-slate-700">
           <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center flex-shrink-0 overflow-hidden">
-            {logoUrl ? <img src={logoUrl} alt="" className="w-full h-full object-contain" /> : <GraduationCap className="w-5 h-5 text-white" />}
+            {logoUrl ? <Image unoptimized width={36} height={36} src={logoUrl} alt="" className="w-full h-full object-contain" /> : <GraduationCap className="w-5 h-5 text-white" />}
           </div>
           {!collapsed && <span className="text-white font-bold text-lg">EduTrack</span>}
           <button onClick={() => setMobileOpen(false)} className="ml-auto lg:hidden text-slate-400 hover:text-white"><X className="w-5 h-5" /></button>
@@ -158,16 +181,4 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
 

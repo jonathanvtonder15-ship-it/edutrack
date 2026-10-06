@@ -1,8 +1,13 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import Image from 'next/image'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
+import { saveStudentPhoto } from '@/lib/student-photos'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +17,7 @@ import { Loader2, ArrowLeft, Save, Camera, Plus, X, BookOpen, AlertTriangle, Awa
 export default function StudentProfilePage() {
   const params = useParams()
   const router = useRouter()
+  const [photoError, setPhotoError] = useState('')
   const user = useAppStore((s) => s.user)
   const studentId = params.id as string
 
@@ -19,7 +25,7 @@ export default function StudentProfilePage() {
   // Zustand persist reads localStorage ASYNC. On first render user is null.
   // mounted becomes true only after useEffect fires, guaranteeing hydration.
   const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+
   const isAdmin = mounted && (user?.role?.toLowerCase() === 'admin' || user?.role?.toLowerCase() === 'admin-teacher')
   const isSmt   = mounted && user?.role?.toLowerCase() === 'smt'
   const isGuardian = mounted && (useAppStore.getState().hasRole('monitor-guardian') || user?.role === 'admin' || user?.role === 'admin-teacher' || user?.role === 'smt')
@@ -46,9 +52,7 @@ export default function StudentProfilePage() {
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => { if (user && studentId) load() }, [user, studentId])
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return
     const [sR, csR, cR, dR, mR] = await Promise.all([
       supabase.from('students').select('*').eq('id', studentId).single(),
@@ -80,7 +84,7 @@ export default function StudentProfilePage() {
       if (al) setAllocs(al.map((a: Record<string, unknown>) => ({ subject_name: (a.subjects as { name: string })?.name || 'General', teacher_name: (a.users as { display_name: string })?.display_name || '-', class_name: (a.classes as { name: string })?.name || '' })))
     }
     setLoading(false)
-  }
+  }, [user, studentId])
 
   async function saveProfile() {
     if (!student) return
@@ -109,15 +113,13 @@ export default function StudentProfilePage() {
   }
 
   async function uploadPhoto(file: File) {
-    if (!student) return
-    const p = `${student.id}.${file.name.split('.').pop()}`
-    const { error } = await supabase.storage.from('student-photos').upload(p, file, { upsert: true })
-    if (!error) {
-      const { data: u } = supabase.storage.from('student-photos').getPublicUrl(p)
-      await supabase.from('students').update({ photo_url: u.publicUrl + '?t=' + Date.now() }).eq('id', student.id)
-      setStudent({ ...student, photo_url: u.publicUrl + '?t=' + Date.now() })
-    }
-    setPhotoOpen(false)
+    if (!student || !user) return
+    setPhotoError('')
+    try {
+      const photo_url = await saveStudentPhoto(user.school_id, student.id, file)
+      setStudent({ ...student, photo_url })
+      setPhotoOpen(false)
+    } catch (error) { setPhotoError(error instanceof Error ? error.message : 'Photo upload failed') }
   }
 
   async function deleteStudent() {
@@ -137,6 +139,9 @@ export default function StudentProfilePage() {
   const pts = demerits.reduce((s, d) => s + d.points, 0)
   const mpts = merits.reduce((s, d) => s + d.points, 0)
 
+  useEffect(() => { setMounted(true) }, [])
+  useLoadEffect(load)
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
   if (!student) return <div className="text-center py-12 text-slate-500">Student not found</div>
 
@@ -155,7 +160,7 @@ export default function StudentProfilePage() {
           <div className="flex items-start gap-6">
             <div className="relative flex-shrink-0">
               {student.photo_url
-                ? <img src={student.photo_url} alt="" className="w-24 h-24 rounded-2xl object-cover cursor-pointer hover:ring-2 hover:ring-blue-500" onClick={() => setBigPhoto(true)} />
+                ? <Image unoptimized width={96} height={96} src={student.photo_url} alt="" className="w-24 h-24 rounded-2xl object-cover cursor-pointer hover:ring-2 hover:ring-blue-500" onClick={() => setBigPhoto(true)} />
                 : <div className="w-24 h-24 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 text-2xl font-bold">{student.name.charAt(0)}{student.surname.charAt(0)}</div>
               }
               {canEdit && <button onClick={() => setPhotoOpen(true)} className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center shadow-lg"><Camera className="w-4 h-4" /></button>}
@@ -319,14 +324,14 @@ export default function StudentProfilePage() {
         <Dialog open={bigPhoto} onOpenChange={() => setBigPhoto(false)}>
           <DialogContent className="max-w-sm">
             <DialogHeader><DialogTitle>{student.surname}, {student.name}</DialogTitle></DialogHeader>
-            <img src={student.photo_url} alt="" className="w-full max-h-[400px] object-contain rounded-lg" />
+            <Image unoptimized width={800} height={800} src={student.photo_url} alt="" className="w-full max-h-[400px] object-contain rounded-lg" />
           </DialogContent>
         </Dialog>
       )}
 
       <Dialog open={photoOpen} onOpenChange={setPhotoOpen}>
-        <DialogContent><DialogHeader><DialogTitle>Upload Photo</DialogTitle></DialogHeader>
-          <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.[0]) uploadPhoto(e.target.files[0]) }} className="text-sm" />
+        <DialogContent><DialogHeader><DialogTitle>Upload Photo</DialogTitle></DialogHeader>{photoError && <p role="alert" className="text-sm text-red-600">{photoError}</p>}
+          <input type="file" accept="image/jpeg,image/png,image/webp,image/gif" onChange={(e) => { if (e.target.files?.[0]) uploadPhoto(e.target.files[0]) }} className="text-sm" />
         </DialogContent>
       </Dialog>
 
@@ -360,31 +365,4 @@ export default function StudentProfilePage() {
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

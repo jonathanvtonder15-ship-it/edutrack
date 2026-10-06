@@ -1,7 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useAppStore } from '@/lib/store'
-import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +8,7 @@ import { Loader2, User, Lock } from 'lucide-react'
 
 export default function AccountPage() {
   const user = useAppStore(s => s.user)
-  const setUser = useAppStore(s => s.setUser)
+  const updateDisplayName = useAppStore(s => s.updateDisplayName)
   const [name, setName] = useState('')
   const [savingName, setSavingName] = useState(false)
   const [nameMsg, setNameMsg] = useState('')
@@ -25,27 +24,28 @@ export default function AccountPage() {
   async function saveName() {
     if (!user || !name.trim()) return
     setSavingName(true); setNameMsg('')
-    const { error } = await supabase.from('users').update({ display_name: name.trim() }).eq('id', user.id)
-    if (!error) { setUser({ ...user, display_name: name.trim() }); setNameMsg('Name updated.') }
-    else setNameMsg('Could not update name.')
-    setSavingName(false)
+    try {
+      const res = await fetch('/api/auth/account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ display_name: name.trim() }) })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      updateDisplayName(user.id, name.trim()); setNameMsg('Name updated.')
+    } catch (error) { setNameMsg(error instanceof Error ? error.message : 'Could not update name.') }
+    finally { setSavingName(false) }
   }
 
   async function savePassword() {
     if (!user) return
     setSavingPw(true); setPwMsg('')
     if (!pw.current || !pw.next) { setPwMsg('Fill in current and new password.'); setSavingPw(false); return }
-    if (pw.next.length < 6) { setPwMsg('New password must be at least 6 characters.'); setSavingPw(false); return }
+    if (pw.next.length < 8) { setPwMsg('New password must be at least 8 characters.'); setSavingPw(false); return }
     if (pw.next !== pw.confirm) { setPwMsg('New passwords do not match.'); setSavingPw(false); return }
-    const bcrypt = (await import('bcryptjs')).default
-    const { data } = await supabase.from('users').select('password_hash').eq('id', user.id).single()
-    const currentHash = (data as Record<string, unknown> | null)?.password_hash as string | undefined
-    if (!currentHash || !bcrypt.compareSync(pw.current, currentHash)) { setPwMsg('Current password is incorrect.'); setSavingPw(false); return }
-    const newHash = bcrypt.hashSync(pw.next, 10)
-    const { error } = await supabase.from('users').update({ password_hash: newHash }).eq('id', user.id)
-    if (!error) { setPw({ current: '', next: '', confirm: '' }); setPwMsg('Password updated. Use it next time you sign in.') }
-    else setPwMsg('Could not update password.')
-    setSavingPw(false)
+    try {
+      const res = await fetch('/api/auth/account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current_password: pw.current, password: pw.next }) })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error)
+      setPw({ current: '', next: '', confirm: '' }); setPwMsg('Password updated. Use it next time you sign in.')
+    } catch (error) { setPwMsg(error instanceof Error ? error.message : 'Could not update password.') }
+    finally { setSavingPw(false) }
   }
 
   return (

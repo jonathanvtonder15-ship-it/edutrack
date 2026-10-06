@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { filterRecipients } from '@/lib/notifications'
@@ -46,23 +48,21 @@ export default function LeaveRegisterPage(){
   const [deleteOpen,setDeleteOpen] = useState<string|null>(null)
   const [deleting,setDeleting] = useState(false)
 
-  useEffect(()=>{ if(user) load() },[user])
-
-  function fmt(ts: string | null): string | null {
+  const fmt = useCallback((ts: string | null) => {
     if (!ts) return null
     return new Date(ts).toLocaleTimeString('en-ZA',{hour:'2-digit',minute:'2-digit'})
-  }
+  }, [])
 
-  async function load(){
+  const load = useCallback(async () => {
     if(!user) return
     const [rR,sR,cR,tR] = await Promise.all([
       supabase.from('leave_register').select('*,students(name,surname),classes(name,id),recorder:users!leave_register_recorded_by_fkey(display_name),to_teacher:users!leave_register_to_teacher_id_fkey(display_name)').eq('school_id',user.school_id).order('created_at',{ascending:false}).limit(300),
       supabase.from('students').select('id,name,surname').eq('school_id',user.school_id).order('surname'),
       supabase.from('classes').select('id,name').eq('school_id',user.school_id),
-      supabase.from('users').select('id,display_name').eq('school_id',user.school_id).in('role',['teacher','smt','admin','admin-teacher']),
+      supabase.from('users').select('id,display_name').eq('active', true).eq('school_id',user.school_id).in('role',['teacher','smt','admin','admin-teacher']),
     ])
     const cids = [...new Set((rR.data||[]).map((r:Record<string,unknown>)=>(r.classes as{id:string})?.id).filter(Boolean))]
-    let tm = new Map<string,string>()
+    const tm = new Map<string,string>()
     if(cids.length>0){
       const{data:al} = await supabase.from('allocations').select('class_id,users!allocations_user_id_fkey(display_name)').in('class_id',cids)
       ;(al||[]).forEach((a:Record<string,unknown>)=>{ const c=a.class_id as string; const t=(a.users as{display_name:string})?.display_name; if(t&&!tm.has(c)) tm.set(c,t) })
@@ -90,14 +90,14 @@ export default function LeaveRegisterPage(){
     if(cR.data) setClasses(cR.data)
     if(tR.data) setTeachers(tR.data.filter((t:{id:string})=>t.id!==user.id))
     setLoading(false)
-  }
+  }, [user, fmt])
 
   async function signOut(){
     if(!user||!selectedStudent||!formClass) return
     setSubmitting(true)
     const { data: rec } = await supabase.from('leave_register').insert({student_id:selectedStudent.id,class_id:formClass,period:formPeriod?parseInt(formPeriod):null,date:new Date().toISOString().split('T')[0],reason:formReason||null,to_teacher_id:formTeacher||null,recorded_by:user.id,school_id:user.school_id}).select('id').single()
     const className = classes.find(c=>c.id===formClass)?.name || 'class'
-    const { data: staff } = await supabase.from('users').select('id').eq('school_id',user.school_id).in('role',['admin','smt','admin-teacher'])
+    const { data: staff } = await supabase.from('users').select('id').eq('active', true).eq('school_id',user.school_id).in('role',['admin','smt','admin-teacher'])
     const targetTeacher = teachers.find(t=>t.id===formTeacher)
     const recipients = new Set<string>()
     if(targetTeacher) recipients.add(targetTeacher.id)
@@ -119,7 +119,7 @@ export default function LeaveRegisterPage(){
     await supabase.from('leave_register').update({arrived_at:new Date().toISOString()}).eq('id',id)
     const rec = records.find(r=>r.id===id)
     if(rec && user){
-      const { data: staff } = await supabase.from('users').select('id').eq('school_id',user.school_id).in('role',['admin','smt','admin-teacher'])
+      const { data: staff } = await supabase.from('users').select('id').eq('active', true).eq('school_id',user.school_id).in('role',['admin','smt','admin-teacher'])
       const ids = new Set<string>((staff||[]).map((u:{id:string})=>u.id))
       const filtered = await filterRecipients(Array.from(ids), 'leave')
       if(filtered.length>0) await supabase.from('notifications').insert(filtered.map(uid=>({user_id:uid,type:'leave',title:`${rec.student_name} arrived`,message:`Arrived with ${user.display_name}`,read:false,school_id:user.school_id})))
@@ -131,7 +131,7 @@ export default function LeaveRegisterPage(){
     await supabase.from('leave_register').update({departed_at:new Date().toISOString()}).eq('id',id)
     const rec = records.find(r=>r.id===id)
     if(rec && user){
-      const { data: staff } = await supabase.from('users').select('id').eq('school_id',user.school_id).in('role',['admin','smt','admin-teacher'])
+      const { data: staff } = await supabase.from('users').select('id').eq('active', true).eq('school_id',user.school_id).in('role',['admin','smt','admin-teacher'])
       const ids = new Set<string>((staff||[]).map((u:{id:string})=>u.id))
       const filtered = await filterRecipients(Array.from(ids), 'leave')
       if(filtered.length>0) await supabase.from('notifications').insert(filtered.map(uid=>({user_id:uid,type:'leave',title:`${rec.student_name} departed`,message:`Left ${user.display_name} — returning to class`,read:false,school_id:user.school_id})))
@@ -157,6 +157,8 @@ export default function LeaveRegisterPage(){
   const todayStillOut = records.filter(r=>r.date===today&&!r.time_in).length
   const withMe = records.filter(r=>r.to_teacher_name && !r.time_in && r.arrived_at && !r.departed_at)
   const isAdmin = user?.role === 'admin' || user?.role === 'admin-teacher'
+
+  useLoadEffect(load)
 
   if(loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
 
@@ -223,19 +225,4 @@ export default function LeaveRegisterPage(){
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

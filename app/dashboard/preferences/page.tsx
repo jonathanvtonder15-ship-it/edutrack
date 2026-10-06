@@ -1,5 +1,7 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,9 +17,7 @@ export default function PreferencesPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
 
-  useEffect(() => { if (user) load() }, [user])
-
-  async function load() {
+  const load = useCallback(async () => {
     if (!user) return
     const { data } = await supabase.from('notification_preferences').select('*').eq('user_id', user.id).single()
     if (data) {
@@ -30,7 +30,7 @@ export default function PreferencesPage() {
       })
     }
     setLoading(false)
-  }
+  }, [user])
 
   async function save() {
     if (!user) return
@@ -45,9 +45,11 @@ export default function PreferencesPage() {
     setPrefs(p => ({ ...p, [k]: !p[k] }))
   }
 
+  useLoadEffect(load)
+
   if (loading) return <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
 
-  const items: Array<{ key: keyof Prefs; label: string; desc: string; icon: any }> = [
+  const items: Array<{ key: keyof Prefs; label: string; desc: string; icon: import('lucide-react').LucideIcon }> = [
     { key: 'batting', label: 'Relief / Batting', desc: 'When you are assigned as a replacement teacher or a relief is allocated', icon: ArrowLeftRight },
     { key: 'demerit', label: 'Demerits', desc: 'When demerits are given to a class you teach', icon: AlertTriangle },
     { key: 'merit', label: 'Merits', desc: 'When merits are given to a class you teach', icon: Award },

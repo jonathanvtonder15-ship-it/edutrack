@@ -1,9 +1,11 @@
 'use client'
-import { useEffect, useState } from 'react'
+
+import { useLoadEffect } from '@/hooks/use-load-effect'
+import { useCallback, useState } from 'react'
 import { useAppStore } from '@/lib/store'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, ClipboardCheck, AlertTriangle, Calendar, DoorOpen, Loader2, Award } from 'lucide-react'
+import { Users, ClipboardCheck, AlertTriangle, Calendar, DoorOpen, Award } from 'lucide-react'
 import Link from 'next/link'
 
 function SkeletonCard(){
@@ -20,9 +22,7 @@ export default function DashboardPage() {
   const [todayAbsent, setTodayAbsent] = useState<Array<{name:string;surname:string;status:string}>>([])
   const [todayStats, setTodayStats] = useState({present:0, absent:0, late:0})
 
-  useEffect(() => { if (user) loadDashboard() }, [user])
-
-  async function loadDashboard() {
+  const loadDashboard = useCallback(async () => {
     if (!user) return
     try {
       const [studentsRes, classesRes, attendanceRes, demeritsRes, meritsRes, battingRes, leaveRes] = await Promise.all([
@@ -60,7 +60,9 @@ export default function DashboardPage() {
         if (allocs) { setAllocations(allocs.map((a: Record<string, unknown>) => ({ class_id: a.class_id as string, class_name: (a.classes as { name: string })?.name || '', grade: (a.classes as { grade: number })?.grade || 0, subject_name: (a.subjects as { name: string })?.name || null }))) }
       }
     } catch (err) { console.error('Dashboard load error:', err) } finally { setLoading(false) }
-  }
+  }, [user])
+
+  useLoadEffect(loadDashboard)
 
   if (!user) return null
 
@@ -121,25 +123,4 @@ export default function DashboardPage() {
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
